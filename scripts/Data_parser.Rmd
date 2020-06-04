@@ -1,0 +1,59 @@
+---
+title: "Data parser"
+output: 
+  html_document: 
+    fig_height: 7
+    fig_width: 9
+    theme: cosmo
+    toc: yes
+editor_options: 
+  chunk_output_type: inline
+---
+
+# README
+This notebook contains the full, end-to-end analysis of the integrative Human Microbiome Project [(iHMP or HMP2)](https://hmpdacc.org/ihmp/) raw_dataset and cross-references with the GSK in-house raw_databases (Assay domain and Gene domain). The aim of this project is to determine novel targets for Inflammatory Bowel Disease (IBD), i.e. Crohn's disease (CD) and/or Ulcerative Colitis (UC) from publicly available microbiome raw_data. The iHMP project (NIDDK U54DE023798) is conducted by several institutions, including Broad Institute and Stanford University. The raw_data from the project are hosted by the [IBDMDB portal](https://ibdmdb.org).
+```{r, include=FALSE}
+knitr::opts_knit$set(root.dir="~/projects/HMP2_Share")
+knitr::opts_chunk$set(root.dir = "~/projects/HMP2_Share")
+
+```
+
+# Data organization
+## Folder structure
+```{bash, eval=FALSE}
+mkdir raw_data
+mkdir elaborated_data
+mkdir tmp
+mkdir results
+mkdir scripts
+
+```
+
+## Get raw_data from IBDMDB
+- The microbiome raw_data contains whole shotgun sequencing raw_data from stool samples. The raw sequences are processed via the [Humann2 pipeline](https://doi.org/10.1038/s41592-018-0176-y) against the [Uniref90  (2018)](https://doi.org/10.1093/bioinformatics/btm098), [KEGG (2016)](https://dx.doi.org/10.1093%2Fnar%2F28.1.27) and [MetaCyc (2018)](https://doi.org/10.1093/nar/gkx935) raw_databases. In this project we are working directly on the pre-processed summary tables, but raw sequences can be downloaded as well and processed separately through the [biobakery](10.1093/bioinformatics/btx754) packages installed on the HPC or on DNANexus platforms. 
+- The LC/MS spectra for the metabolomics analyses are also available, but here we will work on the pre-processed metabolite abundances computed using the [MetaboAnalyst 2](https://doi.org/10.3390/metabo9030057) software against the [HMDB](https://doi.org/10.1093/nar/gkx1089) raw_database.
+- The host transcriptomics data are obtained via bulk RNASeq from biopsies of patients in different location of the intestines. The Transcripts were aligned to hg19 using topHat 2.0.14 and resolved to counts with htseq-count 0.6.1. Here again we'll work with the pre-processed tables.
+
+```{bash, eval=FALSE}
+#Sample data
+wget https://ibdmdb.org/tunnel/products/HMP2/Metadata/hmp2_metadata.csv -O raw_data/hmp2_metadata.csv
+
+#Microbiome tables
+##Species
+wget https://ibdmdb.org/tunnel/products/HMP2/WGS/1818/taxonomic_profiles.tsv.gz -O raw_data/taxonomic_profiles.tsv.gz
+##Enzymes (ECs)
+wget https://ibdmdb.org/tunnel/products/HMP2/WGS/1818/ecs.tsv.gz -O raw_data/ecs.tsv.gz
+##MetaCyc pathways
+wget https://ibdmdb.org/tunnel/products/HMP2/WGS/1818/pathabundances.tsv.gz -O raw_data/pathabundances.tsv.gz
+
+#Metabolimics tables
+wget https://ibdmdb.org/tunnel/products/HMP2/Metabolites/1723/HMP2_metabolomics.csv.gz -O raw_data/HMP2_metabolomics.csv.gz
+
+#Host transcriptomes
+wget https://ibdmdb.org/tunnel/products/HMP2/HTX/1730/host_tx_counts.tsv.gz -O raw_data/host_tx_counts.tsv.gz
+
+#HMDB database
+wget http://www.hmdb.ca/system/downloads/current/hmdb_metabolites.zip -O raw_data/HMDB.zip
+python HMDB_parser.py
+
+```

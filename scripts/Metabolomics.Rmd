@@ -1,0 +1,896 @@
+---
+title: "Metabolomics"
+output:
+  html_document:
+    fig_height: 7
+    fig_width: 9
+    theme: cosmo
+    toc: yes
+  html_notebook:
+    toc: yes
+editor_options:
+  chunk_output_type: inline
+---
+```{r}
+basepath <- '/home/an958266/projects/HMP2_Share'
+```
+
+```{r setup, warning=FALSE, message=FALSE}
+knitr::opts_knit$set(root.dir=basepath, dpi=600)
+knitr::opts_chunk$set(root.dir = basepath, dpi=600)
+knitr::knit_engines$set(python = reticulate::eng_python)
+
+library(reticulate)
+reticulate::use_virtualenv(file.path(basepath, '.venv/'), required = T)
+reticulate::py_discover_config()
+
+library(data.table)
+library(tidyverse)
+library(arsenal)
+library(janitor)
+library(ggsci)
+library(ggthemes)
+library(ggfortify)
+library(compositions)
+library(SpiecEasi)
+library(pheatmap)
+library(dabestr)
+library(caret)
+library(scales)
+# library(Maaslin2)
+library(splitstackshape)
+library(htmltab)
+select <- dplyr::select
+
+reticulate::source_python(file.path(basepath, 'scripts/ML_modeling.py'))
+wdir = r_to_py(basepath)
+```
+
+# Data preparation
+There are no technical replicates in the data. Since we are talking about metabolomics spectral peaks, we will proceed as follows:
+  - group the area by LC/MS method/column per sample
+  - compute the ratio between each peak area and the total
+  - multiply the ratio to 1e6 to obtain the ppm
+  - normalize with ~centered log-ratio~ transformation
+After that, outliers will be filtered out from the samples via PCA analysis
+
+```{r, warning=FALSE}
+#
+techreps <- fread('raw_data/HMP2_metabolomics.csv.gz') %>% 
+  colnames %>% 
+  `[`(grepl('techrep|TR',.)) %>% 
+  str_remove_all('_techrep|_TR')
+
+metabolomics_raw <- fread('raw_data/HMP2_metabolomics.csv.gz')
+sample_data <- fread('elaborated_data/HMP2_sample_data')
+
+metabolomics_raw[,c(5,8:533)] %>% 
+  rename(HMDB=`HMDB (*Representative ID)`) %>% 
+  distinct(HMDB, .keep_all = TRUE) %>% 
+  drop_na(HMDB) %>% 
+  mutate_if(is.numeric,
+            ~./sum(., na.rm = T),
+            ~ilr(.)
+            ) %>% 
+  column_to_rownames('HMDB') %>% 
+  t %>% 
+  as.data.frame() %>% 
+  qplot(HMDB00190, 
+        data = ., 
+        geom = "density")
+
+smpl_names <- sample_data %>% filter(data_type=='metabolomics') %>% distinct(external_id) %>% pull
+
+metabolomics_elab <- metabolomics_raw %>% 
+  select(-`Pooled QC sample CV`, -`m/z`, -RT) %>% 
+  rename(HMDB=`HMDB (*Representative ID)`) %>% 
+  group_by(Method) %>%
+  mutate_if(is.numeric,
+            ~./sum(., na.rm = T),
+            ~ilr(.)
+            ) %>% 
+  ungroup %>%
+  group_by(HMDB, Metabolite) %>% 
+  summarize_if(is.numeric, ~mean(., na.rm=TRUE)) %>% 
+  ungroup %>% 
+  select(HMDB, Metabolite,
+         one_of(smpl_names))
+
+maybe.typos <- metabolomics_elab %>% 
+  group_by(HMDB) %>% 
+  mutate(v=n_distinct(Metabolite)) %>% 
+  filter(v==2) %>% 
+  mutate_if(is.numeric, mean) %>% 
+  mutate(Metabolite = unique(Metabolite)[1]) %>% 
+  distinct_all %>% 
+  ungroup
+
+metabolomics_elab <- metabolomics_elab %>% 
+  filter(!HMDB %in% maybe.typos$HMDB) %>% 
+  bind_rows(maybe.typos)
+
+dat = sample_data[sample_data$external_id %in% colnames(metabolomics_elab), ]
+
+metabolomics_pc <- metabolomics_elab %>% 
+  select_if(is.numeric) %>% 
+  na.omit %>% 
+  t %>% 
+  # `[`(1:10,1:2)%>% 
+  prcomp(., scale. = TRUE, center = TRUE)
+#
+```
+
+```{r}
+
+screeplot(metabolomics_pc)
+biplot(metabolomics_pc)
+
+metabolomics_pc$x %>% 
+  as.data.frame %>% 
+  rownames_to_column %>% 
+  left_join(dat, by=c('rowname'='external_id')) %>% 
+  ggplot(aes(x=PC1,y=PC2, color=diagnosis)) + 
+  geom_point()+
+  theme_minimal()+
+  scale_color_tableau()+
+  stat_ellipse()+
+  scale_fill_tableau()
+
+```
+
+# PCA filtering
+```{r}
+outliers <- metabolomics_pc$x %>% 
+  as.data.frame %>% 
+  rownames_to_column %>% 
+  filter(abs(PC1) > 20 | abs(PC2)>16) %>%
+  pull(rowname)
+
+metabolomics_elab %>% 
+  select(-one_of(outliers)) %>% 
+  select_if(is.numeric) %>% 
+  na.omit %>% 
+  t %>% 
+  prcomp(., scale. = TRUE) %>% 
+  `$`(x) %>% 
+  as.data.frame %>% 
+  rownames_to_column %>% 
+  left_join(dat, by=c('rowname'='external_id')) %>% 
+  ggplot(aes(x=PC1,y=PC2, color=diagnosis))  + 
+  geom_point()+
+  theme_minimal()+
+  scale_color_tableau()+
+  stat_ellipse()+
+  scale_fill_tableau()
+
+```
+
+# Save data with and without covariates
+```{r}
+metabolomics_elab %>% 
+  select(-one_of(outliers)) %>% 
+  mutate(HMDB = ifelse(is.na(HMDB), 'HMBD_missing', HMDB)) %>% 
+  filter(HMDB != '' & Metabolite != '') %>%
+  mutate(idx=paste0(HMDB, '; ', Metabolite)) %>% 
+  select(-HMDB, -Metabolite) %>%
+  filter(!duplicated(.$idx)) %>% 
+  column_to_rownames('idx') %>% 
+  t %>% 
+  as.data.frame %>% 
+  write_csv(file.path(basepath,'tmp/mbx_elab_abundances.csv'))
+
+metabolomics_elab %>% 
+  select(-one_of(outliers)) %>% 
+  mutate(HMDB = ifelse(is.na(HMDB), 'HMBD_missing', HMDB)) %>% 
+  filter(HMDB != '' & Metabolite != '') %>%
+  mutate(idx=paste0(HMDB, '; ', Metabolite)) %>% 
+  select(-HMDB, -Metabolite) %>%
+  filter(!duplicated(.$idx)) %>% 
+  column_to_rownames('idx') %>% 
+  t %>% 
+  as.data.frame %>% 
+  rownames_to_column('external_id') %>% 
+  left_join(sample_data %>% 
+              select(external_id, diagnosis, site_name, education_level, participant_id,
+                  probiotic,antibiotics,race, sex, consent_age, fecalcal)) %>% 
+  distinct(external_id, .keep_all = TRUE) %>% 
+  write_csv(file.path(basepath,'tmp/mbx_elab_full.csv'))
+
+mbxldata <- fread(file.path(basepath,'tmp/mbx_elab_full.csv')) %>% 
+  select(1:552) %>% 
+  column_to_rownames('external_id') %>% 
+  mutate_at(vars(-diagnosis), ~scale(.)[,1]) %>% 
+  mutate(diagnosis=factor(diagnosis))
+
+# MASS::lda(formula=diagnosis~., data = mbxldata) %>%
+#   predict(.) %>%
+#   data.frame(diagnosis = .$class, .$x) %>%
+#   ggplot() +
+#   geom_point(aes(LD1, LD2, colour = diagnosis), size = 2.5)+
+#   theme_minimal()+
+#   scale_colour_viridis_d(begin = .1, end = .8)+
+#   xlab('LD1 (59.55%)')+
+#   ylab('LD2 (40.45%)')
+```
+
+# Check impact of confounding variables 
+```{r, fig.height=8, fig.width=8}
+datamat <- fread(file.path(basepath,'tmp/mbx_elab_full.csv')) %>% 
+  arrange(diagnosis) %>% 
+  mutate_if(is.numeric, ~replace_na(.,min(., na.rm = TRUE)/10)) %>% 
+  column_to_rownames('external_id') %>% 
+  select(contains('HMDB')) %>% 
+  as.matrix 
+
+column_annotations <- fread(file.path(basepath,'tmp/mbx_elab_full.csv')) %>% 
+  select(external_id, diagnosis, site_name) %>% 
+  arrange(diagnosis) %>% 
+  column_to_rownames('external_id')
+
+pheatmap(datamat,
+         color = colorRampPalette(colors = c("black", "aquamarine"))(200),
+         clustering_method = 'mcquitty', 
+         scale='column',
+         annotation_row  = column_annotations, 
+         cluster_rows = F)
+
+```
+
+# Bootstrapped effect size estimation, Mann Withney-U test
+```{r, fig.retina=2, dpi=600}
+abundances = fread(file.path(basepath,'tmp/mbx_elab_full.csv')) #%>% 
+  #mutate_if(is.numeric, ~replace_na(.,min(., na.rm = TRUE)/10)) 
+
+source_python(file.path(basepath,'scripts/dbmwu.py'))
+
+results <- dbmwu(
+  r_to_py(
+    abundances%>% 
+      select(2:diagnosis)
+    )
+  )
+
+#Example of one results plot
+dabest_results  <- 
+  abundances %>%
+  dabest(diagnosis, 
+         `HMDB00039; butyrate`,
+         idx = c("nonIBD", "UC","CD"), 
+         paired = FALSE)
+plot(dabest_results, color.column=site_name)
+
+write_csv(results, file.path(basepath,'results/dbmwu_results.csv'))
+```
+
+# Linear mixed models (Maaslin2)
+```{r eval=FALSE, include=FALSE}
+abundances <- fread(file.path(basepath,'tmp/mbx_elab_full.csv')) %>% 
+  mutate_if(is.numeric, ~replace_na(.,0)) %>% #~replace_na(.,min(., na.rm = TRUE)/10)) %>% 
+  select(external_id, contains('HMDB'), contains('redundant')) %>%
+  tibble::column_to_rownames('external_id')
+
+maaslin_variables <- fread(file.path(basepath,'tmp/mbx_elab_full.csv')) %>%
+  mutate(diagnosis = case_when(diagnosis== 'nonIBD' ~ 'Control', 
+                               diagnosis== 'UC' ~ 'Lev1. UC',
+                               diagnosis== 'CD'~ 'Lev2. CD')) %>%
+  tibble::column_to_rownames('external_id') %>% 
+  select(diagnosis, site_name, participant_id, consent_age, antibiotics)
+
+mbx_full.fitting2 <- Maaslin2(abundances, maaslin_variables, 
+                            file.path(basepath,'results/maaslin2'), 
+                            normalization = 'NONE', 
+                            transform='NONE',
+                            analysis_method = 'LM',
+                            random_effects = c('site_name','participant_id'), 
+                            cores=16)
+
+```
+
+
+# Machine Learning models
+## Prepare
+```{r}
+abundances = fread(file.path(basepath,'tmp/mbx_elab_full.csv')) %>% 
+  mutate_if(is.numeric, ~replace_na(.,0)) %>% #~replace_na(.,min(., na.rm = TRUE)/10)) %>% 
+  select(contains('HMDB'), contains('redundant'), 
+         site_name, antibiotics, consent_age,
+         -diagnosis, -external_id, -participant_id) #contains('HMDB'))
+diagnosis_v = fread(file.path(basepath,'tmp/mbx_elab_full.csv')) %>%  
+  select(diagnosis)
+
+patients <- fread(file.path(basepath,'tmp/mbx_elab_full.csv')) %>% 
+  select(participant_id)
+
+
+train_obj <- skfold(abundances = r_to_py(abundances),
+                    category = r_to_py(diagnosis_v),
+                    clusters = patients,
+                    savename='mbx')
+
+```
+## Train
+```{r warning=FALSE}
+dir.create(file.path(basepath,'tmp/ML'))
+
+ML_train_class(X_train = train_obj[[1]], X_test = train_obj[[2]],
+               y_train = train_obj[[3]], y_test = train_obj[[4]],
+               savename='mbx') %>% cat
+```
+
+## Evaluation
+```{r}
+cv_params <- dict(
+  )
+
+predictions <- ML_predict_best(X_train = train_obj[[1]], X_test = train_obj[[2]],
+                               y_train = train_obj[[3]], y_test = train_obj[[4]], 
+                               best_model = 'tmp/ML/mbx_XGB.sav',
+                               tune=FALSE, cv_params = cv_params)
+
+cm <- confusionMatrix(factor(predictions) %>% 
+  `levels<-` (levels(as.factor(diagnosis_v$diagnosis))), 
+  factor(train_obj[[4]]) %>% 
+  `levels<-` (levels(as.factor(diagnosis_v$diagnosis))),
+  mode = 'everything') 
+
+print(cm)
+
+cm$table %>% 
+  t %>% 
+  `[`(,ncol(.):1) %>% 
+  melt %>% 
+  ggplot(aes(x=Reference, y=Prediction, fill=value)) + 
+  geom_raster()+
+  theme_clean()+
+  scale_fill_gradient2(high='#008080')+
+  xlab("True")+
+  ylab("Predicted")+
+  theme(axis.text.x=element_text(angle=45,hjust=1,vjust=1))+
+  geom_text(aes(label = value))+
+  geom_text(aes(label = percent(value/sum(value))), vjust = 2)
+
+```
+
+## Explaination
+```{r}
+dir.create(file.path(basepath, 'results/ML'))
+
+ML_explain(best_model='tmp/ML/mbx_XGB.sav', 
+           X_test = train_obj[[2]], 
+           category = r_to_py(diagnosis_v), 
+           savename='mbx', tune=FALSE)
+
+fread(file.path(basepath,'results/ML/mbx_XGB_fi.csv')) %>% 
+  top_n(20) %>%
+  ggplot(aes(x=reorder(features, percentage), 
+             y=percentage))+
+  geom_histogram(stat = 'identity')+
+  xlab('Feature importance')+
+  coord_flip()+
+  theme_clean()
+
+fread(file.path(basepath,'results/ML/mbx_XGB_shapi.csv')) %>%
+  rowwise() %>% 
+  mutate(wt = sum(nonIBD, UC, CD)) %>%
+  ungroup %>% 
+  top_n(n = 20) %>% 
+  select(-wt) %>% 
+  melt %>% 
+  ggplot(aes(x=reorder(mbx, value),
+             y=value, 
+             color=variable, 
+             fill=variable))+
+  geom_bar(stat='identity') +
+  coord_flip()+
+  theme_clean()+
+  xlab('features')+
+  ylab('SHAP values')+
+  scale_fill_tableau()+scale_color_tableau()+
+  theme(legend.position = 'top')
+  
+```
+
+```{r eval=FALSE, include=FALSE}
+#Diagnostic with internal xgb in R
+library(xgboost)
+
+xgb <- xgboost(data = data.matrix(train_obj[[1]]), 
+ label = train_obj[[3]], 
+ nround=800, 
+ seed = 42,
+ max_depth = 15, 
+ subsample = 0.5,
+ colsample_bytree = 0.5,
+ eval_metric = "merror",
+ objective = "multi:softmax",
+ num_class = 3,
+ nthread = 3,
+ early_stopping_rounds=20
+)
+
+predictions<-predict(xgb, data.matrix(train_obj[[2]]))
+
+cm <- confusionMatrix(factor(predictions) %>% 
+  `levels<-` (levels(as.factor(diagnosis_v$diagnosis))), 
+  factor(train_obj[[4]]) %>% 
+  `levels<-` (levels(as.factor(diagnosis_v$diagnosis)))) 
+
+print(cm)
+
+cm$table %>% 
+  t %>% 
+  `[`(,ncol(.):1) %>% 
+  melt %>% 
+  ggplot(aes(x=Reference, y=Prediction, fill=value)) + 
+  geom_raster()+
+  theme_clean()+
+  scale_fill_gradient2(high='#008080')+
+  xlab("True")+
+  ylab("Predicted")+
+  theme(axis.text.x=element_text(angle=45,hjust=1,vjust=1))+
+  geom_text(aes(label = value))+
+  geom_text(aes(label = percent(value/sum(value))), vjust = 2)
+```
+
+## Optimization
+```{r, warning=FALSE}
+cv_params <- dict(
+  #max_depth= as.integer(c(5,10,15)) 
+  #min_child_weight= c(1,3,6,10),
+  learning_rate= c(0.1,0.01),
+  #gamma=c(0.2, 0.5),
+  n_estimators= as.integer(c(500, 1000,5000)),
+  subsample= c(0.5, 0.8, 1), 
+  colsample_bytree= c(1, 0.8)
+  )
+
+predictions <- ML_predict_best(X_train = train_obj[[1]], X_test = train_obj[[2]],
+                               y_train = train_obj[[3]], y_test = train_obj[[4]], 
+                               best_model = 'tmp/ML/mbx_XGB.sav',
+                               tune=TRUE, cv_params = cv_params)
+
+cm <- confusionMatrix(factor(predictions) %>% 
+  `levels<-` (levels(as.factor(diagnosis_v$diagnosis))), 
+  factor(train_obj[[4]]) %>% 
+  `levels<-` (levels(as.factor(diagnosis_v$diagnosis))),
+  mode = 'everything') 
+
+print(cm)
+
+cm$table %>% 
+  t %>% 
+  `[`(,ncol(.):1) %>% 
+  melt %>% 
+  ggplot(aes(x=Reference, y=Prediction, fill=value)) + 
+  geom_raster()+
+  theme_clean()+
+  scale_fill_gradient2(high='#008080')+
+  xlab("True")+
+  ylab("Predicted")+
+  theme(axis.text.x=element_text(angle=45,hjust=1,vjust=1))+
+  geom_text(aes(label = value))+
+  geom_text(aes(label = percent(value/sum(value))), vjust = 2)
+
+
+ML_explain(best_model='tmp/ML/mbx_XGB_optimized.sav', 
+           X_test = train_obj[[2]], 
+           category = r_to_py(diagnosis_v), 
+           savename='mbx', tune=FALSE)
+
+fread('results/ML/mbx__XGB_optimized_shapi.csv') %>%
+  rowwise() %>% 
+  mutate(wt = sum(nonIBD, UC, CD)) %>%
+  ungroup %>% 
+  top_n(n = 20) %>% 
+  select(-wt) %>% 
+  melt %>% 
+  rename(diagnosis=variable) %>% 
+  ggplot(aes(x=reorder(mbx, value),
+             y=value, 
+             color=diagnosis, 
+             fill=diagnosis))+
+  geom_bar(stat='identity') +
+  coord_flip()+
+  theme_clean()+
+  xlab('features')+
+  ylab('Shapley values')+
+  scale_fill_pander()+
+  scale_color_pander()+
+  theme(legend.position = 'top', 
+        axis.text = element_text(size=12))
+  
+```
+
+
+## Mixed models ML
+### Clusters
+```{r}
+dir.create(file.path(basepath, 'tmp/GMML'))
+dir.create(file.path(basepath, 'results/GMML'))
+
+gmml_res_cl <- GMML(X_train = train_obj[[1]], X_test = train_obj[[2]],
+                 y_train = train_obj[[3]], y_test = train_obj[[4]],
+                 category = r_to_py(diagnosis_v), 
+                 clusters_train = train_obj[[5]], clusters_test = train_obj[[6]],
+                 savename='mbx')
+
+gmml_mod_cl <- py_load_object(file.path(basepath,'tmp/GMML/mbx_gmme_cl_XGBClassifier.sav'))
+
+cm2 <- confusionMatrix(factor(gmml_res_cl) %>% 
+  `levels<-` (levels(as.factor(diagnosis_v$diagnosis))), 
+  factor(train_obj[[4]]) %>% 
+  `levels<-` (levels(as.factor(diagnosis_v$diagnosis))),
+  mode = 'everything') 
+
+gmml_mod_cl$gll_history %>% 
+  as.matrix %>% 
+  plot
+
+gmml_mod_cl$r2_history %>% 
+  as.matrix %>% 
+  plot
+
+gmml_mod_cl_b <- gmml_mod_cl$b_history
+
+
+print(cm2)
+
+cm2$table %>% 
+  t %>% 
+  `[`(,ncol(.):1) %>% 
+  melt %>% 
+  ggplot(aes(x=Reference, y=Prediction, fill=value)) + 
+  geom_raster()+
+  theme_clean()+
+  scale_fill_gradient2(high='#008080')+
+  xlab("True")+
+  ylab("Predicted")+
+  theme(axis.text.x=element_text(angle=45,hjust=1,vjust=1))+
+  geom_text(aes(label = value))+
+  geom_text(aes(label = percent(value/sum(value))), vjust = 2)
+
+fread(file.path(basepath,'results/GMML/mbx_XGBClassifier_fi.csv')) %>% 
+  top_n(20) %>%
+  ggplot(aes(x=reorder(features, percentage), 
+             y=percentage))+
+  geom_histogram(stat = 'identity')+
+  xlab('Feature importance')+
+  coord_flip()+
+  theme_clean()
+
+fread(file.path(basepath,'results/GMML/mbx_gmme_XGBClassifier_shapi.csv')) %>%
+  rowwise() %>% 
+  mutate(wt = sum(nonIBD, UC, CD)) %>%
+  ungroup %>% 
+  top_n(n = 20) %>% 
+  select(-wt) %>% 
+  melt %>% 
+  ggplot(aes(x=reorder(mbx, value),
+             y=value, 
+             color=variable, 
+             fill=variable))+
+  geom_bar(stat='identity') +
+  coord_flip()+
+  theme_clean()+
+  xlab('features')+
+  ylab('SHAP values')+
+  scale_fill_pander()+scale_color_pander()+
+  theme(legend.position = 'top')
+
+```
+
+### Random effects and fixed effects
+```{r}
+gmml_res_me <- GMML(X_train = train_obj[[1]], X_test = train_obj[[2]],
+                 y_train = train_obj[[3]], y_test = train_obj[[4]],
+                 category = r_to_py(diagnosis_v), 
+                 clusters_train = train_obj[[5]], clusters_test = train_obj[[6]],
+                 random_effects = r_to_py(list('site_name')),
+                 fixed_effects = r_to_py(list('antibiotics','consent_age')),
+                 savename='mbx', min_iter = 1, max_iter = 20)
+
+gmml_mod_me <- py_load_object(file.path(basepath,'tmp/GMML/mbx_gmme_me_XGBClassifier.sav'))
+
+gmml_mod_me_b <- gmml_mod_cl$b_history
+
+cm3 <- confusionMatrix(factor(gmml_res_me) %>% 
+  `levels<-` (levels(as.factor(diagnosis_v$diagnosis))), 
+  factor(train_obj[[4]]) %>% 
+  `levels<-` (levels(as.factor(diagnosis_v$diagnosis))),
+  mode = 'everything')  
+
+gmml_mod_me$gll_history %>% 
+  as.matrix %>% 
+  plot
+
+gmml_mod_me$r2_history %>% 
+  as.matrix %>% 
+  plot
+
+print(cm3)
+
+cm3$table %>% 
+  t %>% 
+  `[`(,ncol(.):1) %>% 
+  melt %>% 
+  ggplot(aes(x=Reference, y=Prediction, fill=value)) + 
+  geom_raster()+
+  theme_clean()+
+  scale_fill_gradient2(high='#008080')+
+  xlab("True")+
+  ylab("Predicted")+
+  theme(axis.text.x=element_text(angle=45,hjust=1,vjust=1))+
+  geom_text(aes(label = value))+
+  geom_text(aes(label = percent(value/sum(value))), vjust = 2)
+
+fread(file.path(basepath,'results/GMML/mbx_gmme_meXGBClassifier_fi.csv')) %>% 
+  top_n(20) %>%
+  ggplot(aes(x=reorder(features, percentage), 
+             y=percentage))+
+  geom_histogram(stat = 'identity')+
+  xlab('Feature importance')+
+  coord_flip()+
+  theme_clean()
+
+fread(file.path(basepath,'results/GMML/mbx_gmme_me_XGBClassifier_shapi.csv')) %>%
+  rowwise() %>% 
+  mutate(wt = sum(nonIBD, UC, CD)) %>%
+  ungroup %>% 
+  top_n(n = 20) %>% 
+  select(-wt) %>% 
+  melt %>% 
+  ggplot(aes(x=reorder(mbx, value),
+             y=value, 
+             color=variable, 
+             fill=variable))+
+  geom_bar(stat='identity') +
+  coord_flip()+
+  theme_clean()+
+  xlab('features')+
+  ylab('SHAP values')+
+  scale_fill_pander()+scale_color_pander()+
+  theme(legend.position = 'top', 
+        axis.text = element_text(size=12))
+
+```
+
+# Stack and consolidate results
+```{r, warning=FALSE}
+#DABEST results
+mwu <- 
+  fread(file.path(basepath,'results/dbmwu_results.csv')) %>% 
+  mutate(regulated_UC=case_when(difference_UC<0~'Low in UC',
+                                 difference_UC>0~'High in UC'),
+         regulated_CD=case_when(difference_CD<0~'Low in CD',
+                                 difference_CD>0~'High in CD'),
+         regulated_IBD=case_when(difference_UC<0 & difference_UC<0 ~'Low in UC+CD',
+                                 difference_CD<0 & difference_CD<0 ~'High in UC+CD'))%>%
+  mutate(regulated_UC = str_replace_na(regulated_UC, "_"), 
+         regulated_CD = str_replace_na(regulated_CD, "_"), 
+         regulated_IBD = str_replace_na(regulated_IBD, "_")) %>%
+  mutate(abundance=paste(regulated_UC, regulated_CD, regulated_IBD, sep='; ')) %>%
+  mutate(abundance = str_remove_all(abundance, ' _;|; _|_; ')) %>% 
+  mutate(HMDB=str_replace_all(HMDB,'HMDB', 'HMDB00'))
+
+
+dir.create(file.path(basepath,'results/summaries'))
+
+mwu %>% 
+  select(-contains('regulated')) %>% 
+  distinct_all %>% 
+  write_csv(file.path(basepath,'results/summaries/mwu_summaries.csv'))
+
+##ML results
+## Note: the after GridSearchCV optimizationm the results are worse, so we are using the non-optimized XGB results
+XGB_shapi <- fread(file.path(basepath,'results/ML/mbx_XGB_shapi.csv')) %>%
+  rename(HMDB=mbx,
+         shap_xgb_CD=CD,
+         shap_xgb_UC=UC,
+         shap_xgb_nonIBD=nonIBD)%>% 
+  mutate(HMDB=str_replace_all(HMDB,'HMDB', 'HMDB00'))
+
+XGB_fi <- fread(file.path(basepath,'results/ML/mbx_XGB_fi.csv')) %>%
+  rename(HMDB=features, 
+         xgb_fi = percentage) %>% 
+  select(-mbx) %>% 
+  mutate(HMDB=str_replace_all(HMDB,'HMDB', 'HMDB00'))
+
+
+XGB_gains <- fread(file.path(basepath,'results/ML/mbx_XGB_gains.csv'))%>%
+  mutate(features=str_remove_all(features,'f')) %>% 
+  mutate(features=colnames(train_obj[[1]])[as.numeric(features)+1]) %>% 
+  rename(HMDB=features) %>% 
+  mutate(HMDB=str_replace_all(HMDB,'HMDB', 'HMDB00'))
+  
+XGB_shapi %>%
+  full_join(XGB_gains) %>%
+  full_join(XGB_fi) %>% 
+  write_tsv(file.path(basepath,'results/summaries/XGB_res_summary.tsv'))
+
+##Mixed effects linear models
+# No results?
+
+# Mixed effects ML
+GMME_shapi <- fread(file.path(basepath,'results/GMML/mbx_gmme_XGBClassifier_shapi.csv')) %>%
+  rename(HMDB=mbx,
+         shap_gmme_CD=CD,
+         shap_gmme_UC=UC,
+         shap_gmme_nonIBD=nonIBD) %>% 
+  mutate(HMDB=str_replace_all(HMDB,'HMDB', 'HMDB00'))
+
+GMME_fi <- fread(file.path(basepath,'results/GMML/mbx_gmme_meXGBClassifier_fi.csv')) %>%
+  rename(HMDB=features,
+         gmme_fi = percentage) %>% 
+  select(-mbx) %>% 
+  mutate(HMDB=str_replace_all(HMDB,'HMDB', 'HMDB00'))
+
+GMME_shapi %>%
+  full_join(GMME_fi) %>%
+  write_tsv(file.path(basepath,'results/summaries/GMME_XGB_res_summary.tsv'))
+
+# Lookup tables
+hmdb_ref_table <- fread(file.path(basepath,'tmp/hmdb_ref_w_hgncid.csv'))
+
+# Master results
+master_mbx <- fread(file.path(basepath,'results/summaries/mwu_summaries.csv')) %>% 
+  full_join(fread(file.path(basepath,'results/summaries/XGB_res_summary.tsv'))) %>% 
+  full_join(fread(file.path(basepath,'results/summaries/GMME_XGB_res_summary.tsv'))) 
+```
+
+```{r}
+master_mbx %>% 
+  pivot_longer(cols=c(contains('pvalue'),contains('fi'),contains('shap'), 'gain')) %>% 
+  mutate(diagnosis = case_when(grepl('CD', name)~'CD', 
+                               grepl('UC', name)~'UC',
+                               grepl('nonIBD', name)~'nonIBD', 
+                               TRUE~NA_character_)) %>% 
+  mutate(name=str_remove_all(name, '_CD|_UC|_nonIBD')) %>% 
+  ggplot(aes(x=name, y=value, color=diagnosis))+
+  geom_violin()+
+  geom_jitter(aes(group=diagnosis), position=position_jitterdodge(), alpha=0.2) +
+  theme_clean() + 
+  coord_flip() + 
+  ggtitle('Before transform')+
+  scale_color_pander(na.value = "grey")
+
+master_mbx %>% 
+  group_by(HMDB) %>%
+  mutate_at(vars(contains('pvalue')), 
+           list(~case_when(is.numeric(.) & .==0 ~ 0.1,
+                              is.na(.) ~ 0.1,
+                              is.numeric(.) ~-log10(.), 
+                              TRUE~.)))%>% 
+  # mutate_at(vars(contains('shap')), 
+  #           list(~case_when(is.numeric(.) & .==0 ~ 1e-6,
+  #                             is.na(.) ~ 1e-6,
+  #                             is.numeric(.) ~ 100*(.), 
+  #                             TRUE~.)))%>%
+  # mutate_at(vars(contains('fi')), 
+  #           list(~case_when(is.numeric(.) & .==0 ~ 1e-3,
+  #                             is.na(.) ~ 1e-3,
+  #                             is.numeric(.) ~ 1000*(.), 
+  #                             TRUE~.))) %>% 
+  ungroup %>% 
+  mutate_at(vars(contains('fi'), contains('shap'), 'gain', contains('pvalue')), 
+            list(~case_when(is.numeric(.) ~ rescale(., to=c(0,1)),
+                              TRUE~.))) %>%
+  pivot_longer(cols=c(contains('pvalue'),contains('fi'),contains('shap'), 'gain')) %>% 
+  mutate(diagnosis = case_when(grepl('CD', name)~'CD', 
+                               grepl('UC', name)~'UC',
+                               grepl('nonIBD', name)~'nonIBD', 
+                               TRUE~NA_character_)) %>% 
+  mutate(name=str_remove_all(name, '_CD|_UC|_nonIBD')) %>% 
+  ggplot(aes(x=name, y=value, color=diagnosis))+
+  geom_violin()+
+  geom_jitter(aes(group=diagnosis), position=position_jitterdodge(), alpha=0.2) +
+  theme_clean() + 
+  coord_flip() + 
+  ggtitle('After transform')+
+  scale_color_pander(na.value = "grey")
+
+```
+
+```{r}
+master_mbx <-master_mbx %>% 
+  mutate_at(vars(contains('pvalue')),
+           list(~case_when(is.numeric(.) & .==0 ~ 0.1,
+                              is.na(.) ~ 0.1,
+                              is.numeric(.) ~-log10(.),
+                              TRUE~.)))%>%
+  # mutate_at(vars(contains('shap')), 
+  #           list(~case_when(is.numeric(.) & .==0 ~ 1e-6,
+  #                             is.na(.) ~ 1e-6,
+  #                             is.numeric(.) ~ 100*(.), 
+  #                             TRUE~.)))%>%
+  # mutate_at(vars(contains('fi')), 
+  #           list(~case_when(is.numeric(.) & .==0 ~ 1e-3,
+  #                             is.na(.) ~ 1e-3,
+  #                             is.numeric(.) ~ 1000*(.), 
+  #                             TRUE~.))) %>% 
+  # #summarize_if(is.numeric, mean, na.rm=TRUE) %>% 
+  # #rowwise %>% 
+  mutate_at(vars(contains('fi'), contains('shap'), 'gain', contains('pvalue')), 
+            list(~ case_when(is.numeric(.) ~ rescale(replace_na(.,0), to=c(0,1)),
+                              TRUE~.))) %>% 
+  group_by(HMDB) %>%
+  mutate(UC_ranking=mean(c(pvalue_mann_whitney_UC, shap_xgb_UC, gain, gmme_fi, 
+                              xgb_fi, shap_gmme_UC),
+                         na.rm=TRUE),
+        CD_ranking=mean(c(pvalue_mann_whitney_CD, shap_xgb_CD, gain, gmme_fi,
+                             xgb_fi, shap_gmme_CD),
+                        na.rm=TRUE) 
+        # nonIBD_ranking =prod(c(
+        #   #mean(pvalue_mann_whitney_CD, pvalue_mann_whitney_UC, na.rm=T),
+        #   0.1, 
+        #   shap_xgb_nonIBD, gain, xgb_fi,
+        #   gmme_fi, shap_gmme_nonIBD),
+        #                 na.rm=TRUE)
+        ) %>%
+  ungroup %>% 
+  mutate_at(vars(contains('ranking')), ~sqrt(rescale(.,to=c(min(.),1))))
+
+master_mbx <-
+  master_mbx %>% 
+   select(HMDB, matches('CD')) %>%
+  `colnames<-` (c('HMDB',
+                  'MWU_delta', 'MWU_qval', 
+                  'XGB_shap', 'GMME_shap', 
+                  'ranking')) %>%
+  mutate(diagnosis='CD') %>%
+  bind_rows(
+    master_mbx %>% 
+    select(HMDB, matches('UC')) %>%
+    `colnames<-` (c('HMDB',
+                    'MWU_delta', 'MWU_qval', 
+                    'XGB_shap', 'GMME_shap',
+                    'ranking')) %>%
+         mutate(diagnosis='UC')
+    ) %>% 
+  # bind_rows(
+  #   master_mbx %>%
+  #   select(HMDB, matches('nonIBD')) %>%
+  #   `colnames<-` (c('HMDB',
+  #                   'XGB_shap', 'GMME_shap',
+  #                   'ranking')) %>%
+  #        mutate(diagnosis='nonIBD')
+  #   ) %>%
+  separate(HMDB, c('HMDB','HMP2_metab'), sep='; ') %>% 
+  #mutate(HMDB=str_remove_all(HMDB, '\\*')) %>% 
+  select(-HMDB) %>% 
+  left_join(fread(file.path(basepath,'tmp/Manual_HMBD_ref.txt')) %>% 
+              select(-SMILES), 
+            by='HMP2_metab') %>%
+  left_join(hmdb_ref_table) %>%
+  left_join(fread(file.path(basepath,'tmp/Manual_HMBD_ref.txt')) %>%
+              select(-HMDB), 
+            by='HMP2_metab') %>% 
+  mutate(SMILES=coalesce(SMILES.x, SMILES.y)) %>% 
+  # mutate(ranking=rescale(log(ranking), to=c(0,2))) %>% 
+  select(-SMILES.x, -SMILES.y)
+
+master_mbx %>% 
+  filter(ranking>quantile(ranking, .75)) %>% 
+  distinct(HMDB,hgncid) %>% 
+  summarize_all(n_distinct)
+
+master_mbx %>% 
+  group_by(HMDB) %>%
+  distinct(HMDB, ranking, diagnosis) %>% 
+  ggplot(aes(x='consensus', y=ranking, color=diagnosis))+
+  geom_violin()+
+  geom_jitter(aes(group=diagnosis), position=position_jitterdodge(), alpha=0.3) +
+  theme_clean() + 
+  coord_flip() + 
+  ggtitle('Consensus')+
+  scale_color_pander(na.value = "grey")
+
+master_mbx%>%
+  write_tsv(file.path(basepath,'results/summaries/master_mbx.tsv'))
+```
+
+```{r}
+sessionInfo()
+```
+```{r}
+save.image(file.path(basepath,'tmp/metabolomics.RData'))
+```
