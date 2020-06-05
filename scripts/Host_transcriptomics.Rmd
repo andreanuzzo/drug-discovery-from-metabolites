@@ -1,0 +1,593 @@
+---
+title: "Host Transcriptomics"
+output:
+  html_document:
+    fig_height: 7
+    fig_width: 9
+    theme: cosmo
+    toc: yes
+    toc_float: yes
+  html_notebook:
+    toc: yes
+editor_options:
+  chunk_output_type: inline
+---
+
+```{r}
+project_folder = "~/projects/HMP2_Share"
+knitr::opts_knit$set(root.dir=project_folder, dpi=720)
+knitr::opts_chunk$set(root.dir = project_folder, dpi=720)
+knitr::knit_engines$set(python = reticulate::eng_python)
+
+library(DESeq2)
+library(BiocParallel)
+#register(MulticoreParam(8))
+library(data.table)
+library(tidyverse)
+library(janitor)
+library(Rtsne)
+library(EnhancedVolcano)
+library(biomaRt)
+library(GOstats)
+library(pathfindR)
+library(esetVis)
+library(sva)
+library(htmltab)
+library(splitstackshape)
+select <- dplyr::select
+
+```
+
+# Preliminary analysis
+## Prepare data
+```{r}
+
+system('mkdir results/RNASeq')
+system('rm -r results/RNASeq/PIN')
+
+cts <- fread(file.path(project_folder,'raw_data/host_tx_counts.tsv.gz')) %>%
+          dplyr::select(-CSMDRVXS, -CSMDRVXT, -CSMDRVXU) %>%
+#         rename(CSM79HG5 = CSM79HG5.2) %>%
+          column_to_rownames('V1') %>% 
+          dplyr::select(which(colSums(.)!=0)) %>%
+          data.matrix
+
+metadata <- fread(file.path(project_folder,'elaborated_data/HMP2_sample_data')) %>%
+              clean_names() %>%
+              filter(data_type == 'host_transcriptomics') %>%
+              select(external_id, participant_id, diagnosis, site_name, consent_age, biopsy_location)  %>%
+              mutate(diagnosis = factor(diagnosis, levels = c('nonIBD','UC','CD'), ordered = FALSE)) %>%
+              filter(external_id %in% colnames(cts)) %>% 
+              column_to_rownames('external_id') 
+
+col_order = intersect(colnames(cts), rownames(metadata))
+
+metadata <- metadata[col_order, ]
+cts <- cts[, col_order]
+
+all(rownames(metadata) == colnames(cts))
+
+dds <- DESeqDataSetFromMatrix(countData = cts, colData = metadata, 
+                              design = ~ diagnosis)
+
+
+dds$diagnosis <- relevel(dds$diagnosis, ref='nonIBD')
+
+
+## Library size normalization
+dds <- DESeq2::estimateSizeFactors(dds)
+
+dat  <- counts(dds, normalized = TRUE)
+
+#Filter scarce genes in the overall dataset
+keep <- rowSums(counts(dds)) >= 10
+dds <- dds[keep,]
+
+### Summary plots 
+se <- as(dds, "SummarizedExperiment")
+
+ese <- ExpressionSet(assay(se),AnnotatedDataFrame(metadata))
+
+print(esetSpectralMap(eset = ese))
+set.seed(42) 
+print(esetTsne(eset = ese, 
+        title = "RNASeq of the IBDMDB cohort",
+        shapeVar = "diagnosis",
+        colorVar = "biopsy_location", 
+        sizeVar = "consent_age", sizeRange = c(0.1, 6),
+        #topSamples = 0, topGenes = 10, cloudGenes = T,
+        Rtsne.args = list(check_duplicates = FALSE,
+                  perplexity=50,
+                  partial_pca = TRUE, 
+                  theta=0.1, 
+                  num_threads=parallel::detectCores()-2)
+      ))
+```
+
+## t-SNE
+```{r}
+tsne_out <- Rtsne(t(assay(dds)),
+                 check_duplicates = FALSE,
+                 perplexity=50,
+                 partial_pca = TRUE,
+                 theta=0.1,
+                 num_threads=parallel::detectCores()-2)
+
+data.frame(x = tsne_out$Y[,1], 
+            y = tsne_out$Y[,2], 
+            col = metadata[colnames(cts),]$biopsy_location, 
+            size = metadata[colnames(cts),]$consent_age,
+            shape = metadata[colnames(cts),]$diagnosis) %>% 
+  ggplot() + 
+  geom_point(aes(x=x, y=y, col=col, size=size, shape=shape))+ 
+  theme_minimal()+
+  ggthemes::scale_colour_pander()+
+  xlab('t-SNE 1') + ylab('t-SNE 2')
+
+ggsave('results/manuscript_files/FigS2.pdf', device = 'pdf', width = 8, height = 6, units = 'in')
+
+#Remove batch effects
+limmads <- limma::removeBatchEffect(x=assay(dds),
+    batch = metadata[rownames(t(assay(dds))),]$biopsy_location)
+
+limtsne_out <- Rtsne(t(limmads),
+                 check_duplicates = FALSE,
+                 perplexity=50,
+                 partial_pca = TRUE,
+                 theta=0.1,
+                 num_threads=parallel::detectCores()-2)
+
+data.frame(x = limtsne_out$Y[,1], 
+            y = limtsne_out$Y[,2], 
+            diagnosis = metadata[colnames(cts),]$diagnosis, 
+           col = metadata[colnames(cts),]$biopsy_location, 
+            size = metadata[colnames(cts),]$consent_age,
+            shape = metadata[colnames(cts),]$diagnosis) %>% 
+  ggplot() + 
+  geom_point(aes(x=x, y=y, col=col, shape=shape, size = size))+ 
+  theme_minimal()+
+  ggthemes::scale_color_pander()
+```
+
+# Differential expression
+## DEGs
+```{r}
+metadata<- metadata %>%
+  rownames_to_column('external_id') %>% 
+  mutate(dummy_loc = case_when(biopsy_location=='Ileum' ~ 'Ileum', 
+                               TRUE ~ 'Non-ileum')) %>% 
+  column_to_rownames('external_id')
+
+colData(dds)<- DataFrame(metadata)  
+  
+# idx  <- rowMeans(dat) > 1
+# dat  <- dat[idx, ]
+# mod  <- model.matrix(~ dummy_loc + diagnosis, colData(dds))
+# mod0 <- model.matrix(~   1, colData(dds))
+# svseq <- svaseq(dat, mod, mod0)
+# stripchart(svseq$sv[, 1] ~ dds$participant_id, vertical = TRUE, main = 'SV1')
+# colnames(dds)[svseq$sv[, 1] > 0.4]
+# 
+# plot(svseq$sv)
+# 
+
+```
+
+# DESeq2
+```{r, warning=F}
+# colData(dds) = cbind(metadata[colnames(dat),], as.data.frame(svseq$sv) %>% clean_names)
+# svs = as.data.frame(svseq$sv)
+# colnames(svs)
+# colData(dds) = cbind(DataFrame(metadata), DataFrame(svs))
+dds$biopsy_location <- as.factor(dds$biopsy_location)
+dds$dummy_loc <- as.factor(dds$dummy_loc)
+
+# design(dds) <- as.formula(paste('~dummy_loc +', paste(#'biopsy_location + consent_age + ',
+#                                            paste(colnames(svs), collapse='+ '))
+#                                 , '+ diagnosis'))
+
+#design(dds) <- ~dummy_loc + diagnosis 
+design(dds) <- ~diagnosis*dummy_loc
+
+##Remove outliers
+# dds <- dds[,!rownames(colData(dds)) %in% colnames(dds)[svseq$sv[, 1] > 0.3]]
+
+diagdds <- DESeq(dds, #test="LRT", reduced=~biopsy_location,
+                 sfType = 'poscounts', parallel=TRUE,
+            BPPARAM = MulticoreParam(( parallel::detectCores()-2 )))
+
+resultsNames(diagdds)
+vsd <- vst(diagdds, blind=FALSE)
+write.csv(assay(vsd), file.path(project_folder, 'results/RNASeq/DESeq2_norm_counts.csv'))
+
+rmtsne_out <- Rtsne(t(counts(diagdds, normalized=T)),
+                 check_duplicates = FALSE,
+                 perplexity=50,
+                 partial_pca = TRUE,
+                 theta=0.1,
+                 num_threads=parallel::detectCores()-2)
+
+data.frame(x = rmtsne_out$Y[,1], 
+            y = rmtsne_out$Y[,2], 
+            diagnosis = metadata[colnames(dat),]$diagnosis,
+            biopsy_location = metadata[colnames(dat),]$biopsy_location) %>% 
+  ggplot() + 
+  geom_point(aes(x=x, y=y, shape=diagnosis, color=biopsy_location), size = 2.5)+ 
+  theme_minimal()+
+  ggthemes::scale_color_pander()
+
+# ggsave('rtsne.png', device = 'png', dpi = 720,height = 4,  width = 7)
+
+rmtsne_out <- Rtsne(t(assay(vsd)),
+                 check_duplicates = FALSE,
+                 perplexity=50,
+                 partial_pca = TRUE,
+                 theta=0.1,
+                 num_threads=parallel::detectCores()-2)
+
+data.frame(x = rmtsne_out$Y[,1], 
+            y = rmtsne_out$Y[,2], 
+            diagnosis = metadata[colnames(dat),]$diagnosis,
+            biopsy_location = metadata[colnames(dat),]$biopsy_location) %>% 
+  ggplot() + 
+  geom_point(aes(x=x, y=y, shape=diagnosis, color=biopsy_location), size = 2.5)+ 
+  theme_minimal()+
+  ggthemes::scale_color_pander()
+```
+
+## Results
+```{r}
+alpha = 0.05
+
+res1 <- results(diagdds,
+                alpha=alpha,
+                contrast=list(
+                  c("diagnosis_UC_vs_nonIBD","diagnosisUC.dummy_locNon.ileum")
+                  # c('diagnosisUC.dummy_locIleum', 'diagnosisnonIBD.dummy_locIleum'), 
+                  # c('diagnosisUC.dummy_locNon.ileum', 'diagnosisnonIBD.dummy_locNon.ileum')
+                              )
+                #contrast = c('diagnosis','UC','nonIBD')
+                )
+
+# res1 <- lfcShrink(diagdds, res=res1,
+#                   type="ashr", 
+#                   contrast=list(
+#                   c("diagnosis_UC_vs_nonIBD","diagnosisUC.dummy_locNon.ileum")
+#                   # c('diagnosisUC.dummy_locIleum', 'diagnosisnonIBD.dummy_locIleum'), 
+#                   # c('diagnosisUC.dummy_locNon.ileum', 'diagnosisnonIBD.dummy_locNon.ileum')
+#                               ),
+#                 #contrast = c('diagnosis','UC','nonIBD'),
+#                   parallel=TRUE,
+#                   BPPARAM = MulticoreParam(( parallel::detectCores()-2 ))
+#             )
+
+res1$hgncid=rownames(res1)
+
+
+
+res1df <- as.data.frame(res1) %>% 
+            filter(padj<1e-2, 
+                   abs(log2FoldChange) > 1
+                   ) %>% 
+            arrange(padj) %>%
+            dplyr::select(hgncid, log2FoldChange, padj)
+write.csv(res1df, file.path(project_folder,'results/RNASeq/DEGs_UC.csv'))
+
+
+res2 <- results(diagdds,
+                alpha=alpha,
+                contrast=list(
+                  c("diagnosis_CD_vs_nonIBD","diagnosisCD.dummy_locNon.ileum")
+                  # c('diagnosisCD.dummy_locIleum', 'diagnosisnonIBD.dummy_locIleum'), 
+                  # c('diagnosisCD.dummy_locNon.ileum', 'diagnosisnonIBD.dummy_locNon.ileum')
+                              )
+                #contrast = c('diagnosis','CD','nonIBD')
+                )
+
+# res2 <- lfcShrink(diagdds, res=res2,
+#                   type="ashr", 
+#                   #contrast = c('diagnosis','UC','nonIBD'), 
+#                   contrast=list(c('diagnosisCD.dummy_locIleum', 'diagnosisnonIBD.dummy_locIleum'), 
+#                                 c('diagnosisCD.dummy_locNon.ileum', 'diagnosisnonIBD.dummy_locNon.ileum')),
+#                   parallel=TRUE,
+#                   BPPARAM = MulticoreParam(( parallel::detectCores()-2 ))
+#             )
+# 
+
+res2$hgncid=rownames(res2)
+
+
+ggpubr::ggarrange(
+  EnhancedVolcano(res1,
+      lab = rownames(res1),
+      x = 'log2FoldChange',
+      y = 'pvalue',
+      xlab = bquote(~Log[2]~ 'fold change'),
+      ylab = bquote(~-Log[10]~adjusted~italic(p)~'-value'),
+      pCutoff = 1e-2,
+      FCcutoff = 1
+                 ),
+  EnhancedVolcano(res2,
+      lab = rownames(res2),
+      x = 'log2FoldChange',
+      y = 'pvalue',
+      xlab = bquote(~Log[2]~ 'fold change'),
+      ylab = bquote(~-Log[10]~adjusted~italic(p)~'-value'),
+      pCutoff = 1e-2,
+      FCcutoff = 1
+      ), 
+  common.legend = T, legend = 'bottom', labels = 'auto'
+)
+
+ggsave('results/manuscript_files/Fig2.pdf', device = 'pdf', width = 16, height = 6, units = 'in')
+
+
+res2df <- as.data.frame(res2) %>% 
+            filter(padj<1e-2, 
+                   abs(log2FoldChange) >0.5
+                   ) %>% 
+            arrange(padj) %>%
+            dplyr::select(hgncid, log2FoldChange, padj)
+
+write.csv(res2df, file.path(project_folder,'results/RNASeq/DEGs_CD.csv'))
+
+```
+
+# Limma
+```{r eval=FALSE, include=FALSE}
+eset <- ExpressionSet(assay(dds),AnnotatedDataFrame(metadata[colnames(assay(dds)),]))
+design <-  model.matrix(as.formula(paste('~dummy_loc +', paste(#'biopsy_location + consent_age + ',
+                                         paste(colnames(svs), collapse='+ ')), '+ diagnosis')),
+                         data = metadata[colnames(counts(dds)),] %>% 
+                          bind_cols(svs))
+
+normcts <- voom(counts(dds),
+                design)
+
+consensus <- duplicateCorrelation(normcts, 
+                                  design,
+                                  block = metadata[colnames(counts(dds)),]$biopsy_location)
+
+normcts <- voom(counts(dds), 
+                design, 
+                plot=TRUE,
+                block = metadata[colnames(counts(dds)),]$biopsy_location,
+                correlation = consensus$consensus)
+
+vrmtsne_out <- Rtsne(t(normcts$weights),
+                 check_duplicates = FALSE,
+                 perplexity=50,
+                 partial_pca = TRUE,
+                 theta=0.1,
+                 num_threads=parallel::detectCores()-2)
+
+data.frame(x = vrmtsne_out$Y[,1], 
+            y = vrmtsne_out$Y[,2], 
+            diagnosis = metadata[rownames(t(assay(dds))),]$diagnosis,
+            biopsy_location = metadata[rownames(t(assay(dds))),]$biopsy_location) %>% 
+  ggplot() + 
+  geom_point(aes(x=x, y=y, shape=diagnosis, color=biopsy_location), size = 2.5)+ 
+  theme_minimal()+
+  ggthemes::scale_color_pander()
+```
+
+## Results
+```{r eval=FALSE, include=FALSE}
+fit <- lmFit(normcts,
+             design,
+             block=metadata[colnames(counts(dds)),]$biopsy_location,
+             correlation=consensus$consensus)
+fit <- eBayes(fit)
+
+fitres <- topTable(fit, number=Inf, adjust.method = 'BH')
+
+EnhancedVolcano(fitres,
+    lab = rownames(fitres),
+    x = 'diagnosisUC',
+    y = 'adj.P.Val',
+    title = 'DEGs for UC vs controls',
+    xlab = bquote(~Log[2]~ 'fold change'),
+    ylab = bquote(~-Log[10]~adjusted~italic(p)~'-value'),
+    pCutoff = 0.0001,
+    FCcutoff = 1.0
+               )
+
+EnhancedVolcano(fitres,
+    lab = rownames(fitres),
+    x = 'diagnosisCD',
+    y = 'adj.P.Val',
+    title = 'DEGs for CD vs controls',
+    xlab = bquote(~Log[2]~ 'fold change'),
+    ylab = bquote(~-Log[10]~adjusted~italic(p)~'-value'),
+    pCutoff = 0.0001,
+    FCcutoff = 1.0
+               )
+```
+
+
+
+#Enrichment analysis
+```{r}
+ensembl = useMart("ensembl",dataset="hsapiens_gene_ensembl")
+
+universeids <- getBM(attributes = 'entrezgene_id', 
+                     filters = 'hgnc_symbol', 
+                     values = rownames(dds), 
+                     mart = ensembl)
+entrezids.UC <- getBM(attributes = 'entrezgene_id', 
+                     filters = 'hgnc_symbol', 
+                     values = res1df$hgncid, 
+                     mart = ensembl)
+
+entrezids.CD <- getBM(attributes = 'entrezgene_id', 
+                     filters = 'hgnc_symbol', 
+                     values = res2df$hgncid, 
+                     mart = ensembl)
+```
+
+##GSEA
+```{r}
+hgcUC <- hyperGTest(new("GOHyperGParams",annotation="org.Hs.eg",
+                        geneIds=entrezids.UC$entrezgene_id,
+                        universeGeneIds=universeids$entrezgene_id,
+                        ontology="BP",
+                        pvalueCutoff=0.05,
+                        testDirection="over"))
+hg.pv <- pvalues(hgcUC)
+hg.pv.fdr <- p.adjust(hg.pv,'BH')
+sigGO.ID <- names(hg.pv.fdr[hg.pv.fdr < 0.05])
+gseaUC <- summary(hgcUC)
+gseaUC <- gseaUC[gseaUC[,1] %in% sigGO.ID,]
+gseaUC %>%
+  dplyr::rename(BH_adjp = Pvalue) %>%
+  arrange(BH_adjp) %>%
+  write_csv(file.path(project_folder,'results/RNASeq/GSEA_UC.csv'))
+
+hgcCD <- hyperGTest(new("GOHyperGParams",annotation="org.Hs.eg",
+                        geneIds=entrezids.CD$entrezgene_id,
+                        universeGeneIds=universeids$entrezgene_id,
+                        ontology="BP",
+                        pvalueCutoff=0.05,
+                        testDirection="over"))
+hg.pv <- pvalues(hgcCD)
+hg.pv.fdr <- p.adjust(hg.pv,'BH')
+sigGO.ID <- names(hg.pv.fdr[hg.pv.fdr < 0.05])
+gseaCD <- summary(hgcCD)
+gseaCD <- gseaCD[gseaCD[,1] %in% sigGO.ID,]
+gseaCD %>%
+  dplyr::rename(BH_adjp = Pvalue) %>%
+  arrange(BH_adjp) %>%
+  write_csv(file.path(project_folder,'results/RNASeq/GSEA_CD.csv'))
+```
+
+##Protein interaction network
+
+```{r}
+dir.create(file.path(project_folder, 'results/RNASeq/PIN'))
+
+UC_RAin <- res1df %>%
+            dplyr::rename(Gene.symbol=hgncid,
+                   logFC=log2FoldChange,
+                   adj.P.Val=padj)
+UC_RAout <- run_pathfindR(UC_RAin, 
+                          output_dir = file.path(project_folder,'results/RNASeq/PIN/UC'), 
+                          gene_sets = "Reactome"
+                         )
+UC_RA_clu <- cluster_pathways(UC_RAout, plot_hmap = TRUE, )
+
+UC_pws_table <- UC_RA_clu[UC_RA_clu$Status == "Representative", ]
+exp_mat <- assay(dds[,dds$diagnosis!='CD'])
+cases <- colnames(dds[,dds$diagnosis=='UC'])
+score_matrix <- calculate_pw_scores(UC_pws_table, exp_mat, cases)
+as.data.frame(score_matrix) %>%
+  rownames_to_column('Pathway') %>%
+          write_csv(file.path(project_folder,'results/RNASeq/Enriched_pathways_UC.csv'))
+
+CD_RAin <- res2df %>%
+            dplyr::rename(Gene.symbol=hgncid,
+                   logFC=log2FoldChange,
+                   adj.P.Val=padj)
+CD_RAout <- run_pathfindR(CD_RAin, 
+                          output_dir = file.path(project_folder,'results/RNASeq/PIN/CD'), 
+                          gene_sets = "Reactome"
+                         )
+CD_RA_clu <- cluster_pathways(CD_RAout, plot_hmap = TRUE)
+exp_mat <- assay(dds[,dds$diagnosis!='UC'])
+cases <- colnames(dds[,dds$diagnosis=='CD'])
+
+CD_pws_table <- CD_RA_clu[CD_RA_clu$Status == "Representative", ]
+score_matrix <- calculate_pw_scores(CD_pws_table, exp_mat, cases)
+as.data.frame(score_matrix) %>%
+  rownames_to_column('Pathway') %>%
+          write_csv(file.path(project_folder,'results/RNASeq/Enriched_pathways_CD.csv'))
+
+```
+
+
+# Stack and consolidate results
+```{r}
+rnaseq <- fread(file.path(project_folder,'results/RNASeq/DEGs_CD.csv'), drop=1) %>%
+            mutate(DE=case_when(log2FoldChange <0 ~ -1,
+                                         log2FoldChange == 0 ~ 0,
+                                         TRUE ~ 1)) %>%
+            # select(-log2FoldChange, -padj) %>%
+            rename_at(vars(-hgncid), ~paste0(., '_CD')) %>% 
+            full_join(fread(file.path(project_folder,'results/RNASeq/DEGs_UC.csv'), drop=1) %>%
+                        mutate(DE=case_when(log2FoldChange <0 ~ -1,
+                                                       log2FoldChange == 0 ~ 0,
+                                                       TRUE ~ 1)
+                               ) %>%
+            # select(-log2FoldChange, -padj) %>%
+              rename_at(vars(-hgncid), ~paste0(., '_UC'))
+            ) %>% 
+            distinct_all 
+
+enriched_pathways <-
+  htmltab(file.path(project_folder,'results/RNASeq/PIN/CD/enriched_pathways.html'), rm_nodata_cols = FALSE) %>% 
+    cSplit(splitCols = c('Up_regulated','Down_regulated'),', ','long') %>% 
+    mutate(hgncid=case_when(is.na(Up_regulated) & is.na(Down_regulated) ~ NA_character_,
+                            is.na(Up_regulated) ~ as.character(Down_regulated),
+                            is.na(Down_regulated) ~ as.character(Up_regulated),
+                            TRUE~paste0(Up_regulated, ',', Down_regulated)
+                            )
+           ) %>% 
+    cSplit('hgncid',',','long') %>% 
+    mutate(pathway_enrichment = case_when(hgncid %in% Up_regulated ~ 1,
+                                 hgncid %in% Down_regulated ~ -1,
+                                 TRUE ~ NA_real_)) %>% 
+    select(hgncid, Pathway, ID, pathway_enrichment, Fold_Enrichment, lowest_p, highest_p, occurrence) %>% 
+    drop_na(hgncid) %>%
+  full_join(htmltab(file.path(project_folder,'results/RNASeq/PIN/UC/enriched_pathways.html'),rm_nodata_cols = FALSE) %>% 
+      cSplit(splitCols = c('Up_regulated','Down_regulated'),', ','long') %>% 
+      mutate(hgncid=case_when(is.na(Up_regulated) & is.na(Down_regulated) ~ NA_character_,
+                              is.na(Up_regulated) ~ as.character(Down_regulated),
+                              is.na(Down_regulated) ~ as.character(Up_regulated),
+                              TRUE~paste0(Up_regulated, ',', Down_regulated)
+      )
+      ) %>% 
+      cSplit('hgncid',',','long') %>% 
+      mutate(pathway_enrichment = case_when(hgncid %in% Up_regulated ~ 1,
+                                   hgncid %in% Down_regulated ~ -1,
+                                   TRUE ~ NA_real_)) %>% 
+      select(hgncid, Pathway, ID, pathway_enrichment, Fold_Enrichment, lowest_p, highest_p, occurrence) %>% 
+      drop_na(hgncid),
+             by=c('hgncid'))%>%
+  rename_if(grepl(".x", names(.)), ~ str_replace_all(.,'\\.x','_CD'))%>%
+  rename_if(grepl(".y", names(.)), ~ str_replace_all(.,'\\.y','_UC'))
+
+rnaseq %>% 
+  left_join(enriched_pathways) %>% 
+  write_tsv(file.path(project_folder,'results/summaries/RNASeq_summaries.tsv'))
+
+
+reactome_genes[CD_RAout$ID] %>% 
+  stack %>% 
+  as.data.frame %>% 
+  dplyr::rename(hgncid=values, ID=ind) %>% 
+  filter(hgncid != 'Reactome Pathway') %>% 
+  left_join(CD_RAout %>% 
+              gather(regulation, hgncid, -ID, -Pathway, -Fold_Enrichment, -occurrence, -lowest_p, -highest_p)) %>%  
+  mutate(diagnosis = 'CD') %>% 
+  bind_rows(reactome_genes[UC_RAout$ID] %>% 
+  stack %>% 
+  as.data.frame %>% 
+  dplyr::rename(hgncid=values, ID=ind) %>% 
+  filter(hgncid != 'Reactome Pathway') %>% 
+  left_join(UC_RAout %>% 
+              gather(regulation, hgncid, -ID, -Pathway, -Fold_Enrichment, -occurrence, -lowest_p, -highest_p)) %>%  
+  mutate(diagnosis = 'UC')
+  ) %>% 
+  group_by(ID) %>% 
+  filter(n_distinct(diagnosis)>1) %>% 
+  ungroup %>% 
+  mutate(Pathway = reactome_pathways[.$ID] %>% unname) %>% 
+  distinct(Pathway)
+
+
+```
+
+```{r}
+sessionInfo()
+save.image(file.path(project_folder,'tmp/host_transcriptomics.RData'))
+```
+

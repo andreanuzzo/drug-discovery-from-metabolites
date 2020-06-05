@@ -7,11 +7,14 @@ global wdir
 cwdir = os.getcwd()
 wdir = os.path.join(cwdir, os.pardir)
 
-#NOTE: similarity searches were conducted in the SmiScreen page with
-#Tanimoto >.8 and Tversky >.9, a=0.5 against GSKSTores and Chembl25
+#NOTE: similarity searches were conducted using ChemAxon MadFAST
 
 Chembl25_tanimoto = pd.read_csv(os.path.join(wdir,'elaborated_data/CHEMBL25.CFP.csv.gz'))
 Chembl25_tversky05 = pd.read_csv(os.path.join(wdir,'elaborated_data/CHEMBL25.CFP_Tv05.csv.gz'))
+
+# NOTE: These scripts are connected to a local copy of the ChEMBL v25 database. 
+# In order to reproduce these scripts you'd need to adapt them to the ChEMBL API. 
+# Therefore this script is left for completedness but will not be run automatically
 
 conn = pyodbc.connect("DSN=impaladsn", autocommit=True)
 
