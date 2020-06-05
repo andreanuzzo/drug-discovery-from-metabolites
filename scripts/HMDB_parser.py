@@ -1,5 +1,10 @@
+import os
 import pandas as pd
 import xml.etree.ElementTree as ET
+
+global wdir
+wdir = os.path.join(os.getcwd(), os.pardir)
+
 e = ET.parse('hmdb_metabolites.xml').getroot()
 
 nodelist = [element.tag for element in e.iter()]
@@ -122,4 +127,4 @@ hmdb_ref = hmdb_ref.drop('HMDB_short', axis=1)\
                           ]]
     
 #hmdb_ref.to_csv('lookup_tables/hmdb_ref_w_hgncid.csv', index=False)
-hmdb_ref.drop_duplicates().to_csv('lookup_tables/hmdb_ref_w_origin.csv', index=False)
+hmdb_ref.drop_duplicates().to_csv(os.path.join(wdir,'lookup_tables/hmdb_ref_w_origin.csv'), index=False)

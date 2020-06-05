@@ -46,6 +46,70 @@ reticulate::source_python(file.path(basepath, 'scripts/ML_modeling.py'))
 wdir = r_to_py(basepath)
 ```
 
+# Metadata
+
+## Quick summary
+
+```{r results='asis'}
+
+sample_data <- fread(file.path(basepath,'raw_data/hmp2_metadata.csv')) %>% 
+  clean_names %>% 
+  mutate(diagnosis=factor(diagnosis, levels = c('nonIBD','UC','CD'), ordered = TRUE))
+
+sample_data %>% 
+  tableby(diagnosis ~ participant_id + site_name + sex + consent_age + antibiotics + data_type, 
+          data=.) %>% 
+  summary
+
+```
+
+## Preprocessing
+
+The preprocessing of the metadata follows the following steps: 
+- restrict the data to the data types of interest
+- eliminate (for the moment?) the samples from the HMP2 pilot project (which are not present in the other data tables)
+
+```{r results='asis'}
+
+sample_data_elaborated <- sample_data %>% 
+  filter(data_type %in% c('host_transcriptomics','metabolomics','metagenomics')) %>% 
+  filter(!grepl('_P', participant_id))
+  
+sample_data_elaborated %>%  
+  tableby(diagnosis~week_num, strata=participant_id, data=.) %>% 
+  summary
+
+```
+
+## Broad overview of the dataset
+
+```{r, fig.width=15, fig.height=10, dpi=600}
+
+sample_data_elaborated %>% 
+  select(external_id, participant_id, diagnosis, data_type, week_num) %>% 
+  ggplot()+
+  aes(x=participant_id, y=week_num) +
+  geom_jitter(aes(color=data_type), )+
+  facet_wrap(.~diagnosis, scales = 'free') +
+  scale_color_colorblind() +
+  theme_igray()+
+  theme(axis.text.x = element_text(angle=90)) +
+  scale_y_continuous(breaks=seq(0,58,by=2))+
+  coord_flip()
+
+```
+
+## Removing patients with few samples
+
+```{r}
+sample_data_elaborated <- sample_data_elaborated %>%
+  filter(!participant_id %in%
+           c('M2086','M2082','M2058','M2044','E5003','C3007', 'E5002','M2059','E5022','E5008'))
+  
+write_csv(sample_data_elaborated, file.path(basepath,'elaborated_data/HMP2_sample_data'))
+
+```
+
 # Data preparation
 There are no technical replicates in the data. Since we are talking about metabolomics spectral peaks, we will proceed as follows:
   - group the area by LC/MS method/column per sample
@@ -56,13 +120,13 @@ After that, outliers will be filtered out from the samples via PCA analysis
 
 ```{r, warning=FALSE}
 #
-techreps <- fread('raw_data/HMP2_metabolomics.csv.gz') %>% 
+techreps <- fread(file.path(basepath,'raw_data/HMP2_metabolomics.csv.gz')) %>% 
   colnames %>% 
   `[`(grepl('techrep|TR',.)) %>% 
   str_remove_all('_techrep|_TR')
 
-metabolomics_raw <- fread('raw_data/HMP2_metabolomics.csv.gz')
-sample_data <- fread('elaborated_data/HMP2_sample_data')
+metabolomics_raw <- fread(file.path(basepath,'raw_data/HMP2_metabolomics.csv.gz'))
+sample_data <- fread(file.path(basepath,'elaborated_data/HMP2_sample_data'))
 
 metabolomics_raw[,c(5,8:533)] %>% 
   rename(HMDB=`HMDB (*Representative ID)`) %>% 
@@ -477,7 +541,7 @@ ML_explain(best_model='tmp/ML/mbx_XGB_optimized.sav',
            category = r_to_py(diagnosis_v), 
            savename='mbx', tune=FALSE)
 
-fread('results/ML/mbx__XGB_optimized_shapi.csv') %>%
+fread(file.path(basepath,'results/ML/mbx__XGB_optimized_shapi.csv')) %>%
   rowwise() %>% 
   mutate(wt = sum(nonIBD, UC, CD)) %>%
   ungroup %>% 
