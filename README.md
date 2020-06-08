@@ -44,7 +44,7 @@ deactivate
 
 3. Get data
 ```
-bash get_data.sh
+bash scripts/get_data.sh
 ```
 
 4. Run the notebooks as follows
