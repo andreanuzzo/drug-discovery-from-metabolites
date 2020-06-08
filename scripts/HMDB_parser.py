@@ -3,9 +3,9 @@ import pandas as pd
 import xml.etree.ElementTree as ET
 
 global wdir
-wdir = os.path.join(os.getcwd(), os.pardir)
+wdir = os.getcwd()
 
-e = ET.parse('hmdb_metabolites.xml').getroot()
+e = ET.parse(os.path.join(wdir, 'raw_data/hmdb_metabolites.xml')).getroot()
 
 nodelist = [element.tag for element in e.iter()]
 

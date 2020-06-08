@@ -13,6 +13,6 @@ wget https://ibdmdb.org/tunnel/products/HMP2/HTX/1730/host_tx_counts.tsv.gz -O r
 
 #HMDB database
 wget http://www.hmdb.ca/system/downloads/current/hmdb_metabolites.zip -O raw_data/HMDB.zip
-unzip raw_data/HMDB.zip
+unzip raw_data/HMDB.zip -d raw_data
 
 source .venv/bin/activate && python3 scripts/HMDB_parser.py && deactivate
