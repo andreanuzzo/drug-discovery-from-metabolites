@@ -1,5 +1,7 @@
 ---
 title: "Figures"
+params:
+  basepath: '../'
 output:
   html_document:
     fig_height: 7
@@ -11,8 +13,8 @@ output:
 editor_options:
   chunk_output_type: inline
 ---
-```{r, include=FALSE}
-basepath <- '/home/an958266/projects/HMP2_Share'
+```{r}
+basepath <- params$basepath
 ```
 
 ```{r setup, warning=FALSE, message=FALSE}

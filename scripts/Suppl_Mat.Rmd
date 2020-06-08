@@ -17,9 +17,12 @@ output:
     toc: yes
 header-includes:
   - \usepackage{helvet}
+params:
+  basepath: '../'
+
 ---
-```{r, include=FALSE}
-basepath <- '/home/an958266/projects/HMP2_Share'
+```{r}
+basepath <- params$basepath
 ```
 
 ```{r setup, warning=FALSE, message=FALSE}

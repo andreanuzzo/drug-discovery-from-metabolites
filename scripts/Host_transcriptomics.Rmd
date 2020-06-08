@@ -1,20 +1,21 @@
 ---
 title: "Host Transcriptomics"
+params:
+  basepath: '../'
 output:
   html_document:
     fig_height: 7
     fig_width: 9
     theme: cosmo
     toc: yes
-    toc_float: yes
   html_notebook:
     toc: yes
 editor_options:
   chunk_output_type: inline
 ---
-
 ```{r}
-project_folder = "~/projects/HMP2_Share"
+project_folder <- params$basepath
+
 knitr::opts_knit$set(root.dir=project_folder, dpi=720)
 knitr::opts_chunk$set(root.dir = project_folder, dpi=720)
 knitr::knit_engines$set(python = reticulate::eng_python)

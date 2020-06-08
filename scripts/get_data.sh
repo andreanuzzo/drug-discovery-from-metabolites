@@ -1,6 +1,6 @@
 #!/bin/sh
 
-cd WORKDIR
+cd ..
 
 #Sample data
 wget https://ibdmdb.org/tunnel/products/HMP2/Metadata/hmp2_metadata.csv -O raw_data/hmp2_metadata.csv
