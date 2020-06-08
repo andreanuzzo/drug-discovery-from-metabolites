@@ -22,8 +22,8 @@ The elaborated data and sample data from the HMP2 original [IBD study](https://d
 ## Steps to reproduce the analysis:
 1. Clone the repository 
 ```
-git clone blabla
-cd blabla
+git clone https://github.com/andreanuzzo/drug-discovery-from-metabolites.git path/to/working/dir
+cd path/to/working/dir
 ```
 2. Prepare the environment (in the same folder)
 ```
@@ -35,7 +35,7 @@ R -e "install.packages('remotes', repos = c(CRAN = 'https://cloud.r-project.org'
 R -e "remotes::install_github('rstudio/renv@${RENV_VERSION}')"
 R -e 'renv::restore()'
 
-## Python environment
+## Python environment (requires venv)
 python3 -m venv .venv
 source .venv/bin/activate
 pip3 install -r requirements.txt
@@ -50,10 +50,10 @@ bash get_data.sh
 4. Run the notebooks as follows
 ```
 cd scripts
-Rscript -e "rmarkdown::render('Metabolomics.Rmd',params=list(basepath = .))"
-Rscript -e "rmarkdown::render('Host_transcriptomics.Rmd',params=list(basepath = .))"
-Rscript -e "rmarkdown::render('Figures.Rmd',params=list(basepath = .))"
-Rscript -e "rmarkdown::render('Suppl_mat.Rmd',params=list(basepath = .))"
+Rscript -e "rmarkdown::render('Metabolomics.Rmd',params=list(basepath = path/to/working/dir))"
+Rscript -e "rmarkdown::render('Host_transcriptomics.Rmd',params=list(basepath = path/to/working/dir))"
+Rscript -e "rmarkdown::render('Figures.Rmd',params=list(basepath = path/to/working/dir))"
+Rscript -e "rmarkdown::render('Suppl_mat.Rmd',params=list(basepath = path/to/working/dir))"
 
 ```
 
