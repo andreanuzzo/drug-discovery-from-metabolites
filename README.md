@@ -38,7 +38,7 @@ R -e 'renv::restore()'
 ## Python environment (requires venv)
 python3 -m venv .venv
 source .venv/bin/activate
-pip3 install numpy==1.18.1 matplotlib==3.1.1 pandas==0.25.3
+pip3 install numpy==1.18.1 matplotlib==3.1.1 pandas==0.25.3 wheel
 pip3 install -r requirements.txt
 deactivate
 ```
