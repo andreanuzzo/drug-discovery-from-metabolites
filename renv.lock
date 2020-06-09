@@ -877,13 +877,6 @@
       "Source": "Bioconductor",
       "Hash": "185a96096fcdebaf6202ca798e193a34"
     },
-    "erma": {
-      "Package": "erma",
-      "Version": "0.14.0",
-      "Source": "Repository",
-      "Repository": null,
-      "Hash": "c3407cac61ccebd4d5d902da5f336141"
-    },
     "esetVis": {
       "Package": "esetVis",
       "Version": "1.8.0",
@@ -994,20 +987,6 @@
       "Source": "Repository",
       "Repository": "CRAN",
       "Hash": "0d9bf02413ddc2bbe8da9ce369dcdd2b"
-    },
-    "gQTLBase": {
-      "Package": "gQTLBase",
-      "Version": "1.14.0",
-      "Source": "Repository",
-      "Repository": null,
-      "Hash": "953ed38d98906518e663395cccf1c4fe"
-    },
-    "gQTLstats": {
-      "Package": "gQTLstats",
-      "Version": "1.14.1",
-      "Source": "Repository",
-      "Repository": null,
-      "Hash": "411cb2e3343eac1e1261e3ad3a1c8775"
     },
     "gdata": {
       "Package": "gdata",
