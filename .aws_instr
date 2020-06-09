@@ -1,5 +1,5 @@
 sudo apt-get update
-sudo apt-get install build-essential gfortran zlib1g-dev liblzma-dev libpcre3-dev libcurl4-openssl-dev java-common libssl-dev libffi-dev python-dev zip unzip
+sudo apt-get install -y build-essential gfortran libbz2-dev zlib1g-dev liblzma-dev libpcre3-dev libcurl4-openssl-dev java-common libssl-dev libffi-dev python-dev zip unzip
 wget https://cran.r-project.org/src/base/R-3/R-3.5.0.tar.gz
 tar -xzvf R-3.5.0.tar.gz
 cd R-3.5.0/
