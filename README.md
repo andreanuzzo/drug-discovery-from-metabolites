@@ -51,10 +51,10 @@ bash scripts/get_data.sh
 4. Run the notebooks as follows
 ```
 cd scripts
-Rscript -e "rmarkdown::render('Metabolomics.Rmd',params=list(basepath = path/to/working/dir))"
-Rscript -e "rmarkdown::render('Host_transcriptomics.Rmd',params=list(basepath = path/to/working/dir))"
-Rscript -e "rmarkdown::render('Figures.Rmd',params=list(basepath = path/to/working/dir))"
-Rscript -e "rmarkdown::render('Suppl_mat.Rmd',params=list(basepath = path/to/working/dir))"
+Rscript -e "rmarkdown::render('Metabolomics.Rmd',params=list(basepath = 'path/to/working/dir'))"
+Rscript -e "rmarkdown::render('Host_transcriptomics.Rmd',params=list(basepath = 'path/to/working/dir'))"
+Rscript -e "rmarkdown::render('Figures.Rmd',params=list(basepath = 'path/to/working/dir'))"
+Rscript -e "rmarkdown::render('Suppl_mat.Rmd',params=list(basepath = 'path/to/working/dir'))"
 
 ```
 
