@@ -309,6 +309,8 @@ abundances = fread(file.path(basepath,'tmp/mbx_elab_full.csv')) #%>%
 
 source_python(file.path(basepath,'scripts/dbmwu.py'))
 
+dir.create(file.path(basepath,'results'))
+
 results <- dbmwu(
   r_to_py(
     abundances%>% 
@@ -367,6 +369,7 @@ diagnosis_v = fread(file.path(basepath,'tmp/mbx_elab_full.csv')) %>%
 patients <- fread(file.path(basepath,'tmp/mbx_elab_full.csv')) %>% 
   select(participant_id)
 
+dir.create(file.path(basepath,'tmp/ML'))
 
 train_obj <- skfold(abundances = r_to_py(abundances),
                     category = r_to_py(diagnosis_v),
@@ -376,8 +379,6 @@ train_obj <- skfold(abundances = r_to_py(abundances),
 ```
 ## Train
 ```{r warning=FALSE}
-dir.create(file.path(basepath,'tmp/ML'))
-
 ML_train_class(X_train = train_obj[[1]], X_test = train_obj[[2]],
                y_train = train_obj[[3]], y_test = train_obj[[4]],
                savename='mbx') %>% cat
@@ -499,7 +500,7 @@ cm$table %>%
 ```
 
 ## Optimization
-```{r, warning=FALSE}
+```{r, eval=FALSE, warning=FALSE}
 cv_params <- dict(
   #max_depth= as.integer(c(5,10,15)) 
   #min_child_weight= c(1,3,6,10),
@@ -737,7 +738,6 @@ mwu <-
   mutate(abundance=paste(regulated_UC, regulated_CD, regulated_IBD, sep='; ')) %>%
   mutate(abundance = str_remove_all(abundance, ' _;|; _|_; ')) %>% 
   mutate(HMDB=str_replace_all(HMDB,'HMDB', 'HMDB00'))
-
 
 dir.create(file.path(basepath,'results/summaries'))
 
