@@ -1,6 +1,7 @@
 #!/bin/sh
 
 mkdir raw_data
+mkdir lookup_tables
 
 #Sample data
 wget https://ibdmdb.org/tunnel/products/HMP2/Metadata/hmp2_metadata.csv -O raw_data/hmp2_metadata.csv
