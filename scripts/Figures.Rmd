@@ -1,5 +1,7 @@
 ---
 title: "Figures"
+params:
+  base_path: '../'
 output:
   html_document:
     fig_height: 7
@@ -12,7 +14,7 @@ editor_options:
   chunk_output_type: inline
 ---
 ```{r}
-basepath <- '.'
+basepath <- params$base_path
 ```
 
 ```{r setup, warning=FALSE, message=FALSE}
