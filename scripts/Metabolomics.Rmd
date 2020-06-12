@@ -795,7 +795,7 @@ GMME_shapi %>%
   write_tsv(file.path(basepath,'results/summaries/GMME_XGB_res_summary.tsv'))
 
 # Lookup tables
-hmdb_ref_table <- fread(file.path(basepath,'tmp/hmdb_ref_w_hgncid.csv'))
+hmdb_ref_table <- fread(file.path(basepath,'tmp/hmdb_ref_w_origin.csv'))
 
 # Master results
 master_mbx <- fread(file.path(basepath,'results/summaries/mwu_summaries.csv')) %>% 
@@ -933,11 +933,6 @@ master_mbx <-
   mutate(SMILES=coalesce(SMILES.x, SMILES.y)) %>% 
   # mutate(ranking=rescale(log(ranking), to=c(0,2))) %>% 
   select(-SMILES.x, -SMILES.y)
-
-master_mbx %>% 
-  filter(ranking>quantile(ranking, .75)) %>% 
-  distinct(HMDB,hgncid) %>% 
-  summarize_all(n_distinct)
 
 master_mbx %>% 
   group_by(HMDB) %>%
