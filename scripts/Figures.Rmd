@@ -12,7 +12,7 @@ editor_options:
   chunk_output_type: inline
 ---
 ```{r}
-basepath <- '..'
+basepath <- '.'
 ```
 
 ```{r setup, warning=FALSE, message=FALSE}
