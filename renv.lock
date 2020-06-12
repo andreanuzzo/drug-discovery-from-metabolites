@@ -808,6 +808,13 @@
       "Repository": "CRAN",
       "Hash": "022c8630abecb00f22740d021ab89595"
     },
+    "desc": {
+      "Package": "desc",
+      "Version": "1.2.0",
+      "Source": "Repository",
+      "Repository": "CRAN",
+      "Hash": "6c8fe8fa26a23b79949375d372c7b395"
+    },
     "dichromat": {
       "Package": "dichromat",
       "Version": "2.0-0",
@@ -1085,10 +1092,10 @@
     },
     "ggplot2": {
       "Package": "ggplot2",
-      "Version": "3.2.1",
+      "Version": "3.3.1",
       "Source": "Repository",
       "Repository": "CRAN",
-      "Hash": "9ac60f09a2f437af8df8638ef3da0288"
+      "Hash": "dd6dc5b9ef202cef18c5200d76e1634c"
     },
     "ggpubr": {
       "Package": "ggpubr",
@@ -1310,6 +1317,13 @@
       "Source": "Repository",
       "Repository": "CRAN",
       "Hash": "363f78c4a62d19c2cce67b58a27aab00"
+    },
+    "isoband": {
+      "Package": "isoband",
+      "Version": "0.2.1",
+      "Source": "Repository",
+      "Repository": "CRAN",
+      "Hash": "9b2f7cf1899f583a36d367702ecf49a3"
     },
     "iterators": {
       "Package": "iterators",
@@ -1592,9 +1606,14 @@
     "pathfindR": {
       "Package": "pathfindR",
       "Version": "1.3.0",
-      "Source": "Repository",
-      "Repository": "CRAN",
-      "Hash": "879237a9993aa3f4b8b8ee390cf212f4"
+      "Source": "GitHub",
+      "RemoteType": "github",
+      "RemoteHost": "api.github.com",
+      "RemoteUsername": "egeulgen",
+      "RemoteRepo": "pathfindR",
+      "RemoteRef": "v1.3.0",
+      "RemoteSha": "70bf1b9bfa502e876a758de0bdd1bdec2afb8737",
+      "Hash": "d71fdb547eb5f225b17297f1e053b195"
     },
     "pathview": {
       "Package": "pathview",
@@ -1623,12 +1642,26 @@
       "Repository": "CRAN",
       "Hash": "9f20924c27aee3d09296c22fb84bc9de"
     },
+    "pkgbuild": {
+      "Package": "pkgbuild",
+      "Version": "1.0.8",
+      "Source": "Repository",
+      "Repository": "CRAN",
+      "Hash": "8d8b5e29223aabb829246397299f0592"
+    },
     "pkgconfig": {
       "Package": "pkgconfig",
       "Version": "2.0.3",
       "Source": "Repository",
       "Repository": "CRAN",
       "Hash": "01f28d4278f15c76cddbea05899c5d6f"
+    },
+    "pkgload": {
+      "Package": "pkgload",
+      "Version": "1.1.0",
+      "Source": "Repository",
+      "Repository": "CRAN",
+      "Hash": "b6b150cd4709e0c0c9b5d51ac4376282"
     },
     "plogr": {
       "Package": "plogr",
@@ -1685,6 +1718,13 @@
       "Source": "Repository",
       "Repository": "CRAN",
       "Hash": "cede8f99ed507aeb7d9e742f54d856f1"
+    },
+    "praise": {
+      "Package": "praise",
+      "Version": "1.0.0",
+      "Source": "Repository",
+      "Repository": "CRAN",
+      "Hash": "a555924add98c99d2f411e37e7d25e9f"
     },
     "preprocessCore": {
       "Package": "preprocessCore",
@@ -1872,6 +1912,13 @@
       "Repository": "CRAN",
       "Hash": "6315535da80d5cc6c2e573966d8c8210"
     },
+    "rprojroot": {
+      "Package": "rprojroot",
+      "Version": "1.3-2",
+      "Source": "Repository",
+      "Repository": "CRAN",
+      "Hash": "f6a407ae5dd21f6f80a6708bbb6eb3ae"
+    },
     "rstatix": {
       "Package": "rstatix",
       "Version": "0.5.0",
@@ -2026,6 +2073,13 @@
       "Source": "Repository",
       "Repository": "CRAN",
       "Hash": "334c69821f300f3c15c9c8ae341dc575"
+    },
+    "testthat": {
+      "Package": "testthat",
+      "Version": "2.3.2",
+      "Source": "Repository",
+      "Repository": "CRAN",
+      "Hash": "0829b987b8961fb07f3b1b64a2fbc495"
     },
     "tibble": {
       "Package": "tibble",

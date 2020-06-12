@@ -16,9 +16,9 @@ editor_options:
 ```{r}
 project_folder <- params$basepath
 
-knitr::opts_knit$set(root.dir=project_folder, dpi=720)
-knitr::opts_chunk$set(root.dir = project_folder, dpi=720)
-knitr::knit_engines$set(python = reticulate::eng_python)
+knitr::opts_knit$set(root.dir=project_folder, dpi=720, cache=TRUE)
+knitr::opts_chunk$set(root.dir = project_folder, dpi=720, cache=TRUE)
+knitr::knit_engines$set(python = reticulate::eng_python, cache=TRUE)
 
 library(DESeq2)
 library(BiocParallel)
@@ -125,7 +125,7 @@ data.frame(x = tsne_out$Y[,1],
   ggthemes::scale_colour_pander()+
   xlab('t-SNE 1') + ylab('t-SNE 2')
 
-ggsave('results/manuscript_files/FigS2.pdf', device = 'pdf', width = 8, height = 6, units = 'in')
+#ggsave('results/manuscript_files/FigS2.pdf', device = 'pdf', width = 8, height = 6, units = 'in')
 
 #Remove batch effects
 limmads <- limma::removeBatchEffect(x=assay(dds),
@@ -320,7 +320,7 @@ ggpubr::ggarrange(
   common.legend = T, legend = 'bottom', labels = 'auto'
 )
 
-ggsave('results/manuscript_files/Fig2.pdf', device = 'pdf', width = 16, height = 6, units = 'in')
+#ggsave('results/manuscript_files/Fig2.pdf', device = 'pdf', width = 16, height = 6, units = 'in')
 
 
 res2df <- as.data.frame(res2) %>% 
@@ -472,9 +472,9 @@ UC_RAin <- res1df %>%
                    adj.P.Val=padj)
 UC_RAout <- run_pathfindR(UC_RAin, 
                           output_dir = file.path(project_folder,'results/RNASeq/PIN/UC'), 
-                          gene_sets = "Reactome"
+                          gene_sets = "Reactome", visualize_pathways = F
                          )
-UC_RA_clu <- cluster_pathways(UC_RAout, plot_hmap = TRUE, )
+UC_RA_clu <- cluster_pathways(UC_RAout, plot_hmap = F)
 
 UC_pws_table <- UC_RA_clu[UC_RA_clu$Status == "Representative", ]
 exp_mat <- assay(dds[,dds$diagnosis!='CD'])
@@ -490,9 +490,9 @@ CD_RAin <- res2df %>%
                    adj.P.Val=padj)
 CD_RAout <- run_pathfindR(CD_RAin, 
                           output_dir = file.path(project_folder,'results/RNASeq/PIN/CD'), 
-                          gene_sets = "Reactome"
+                          gene_sets = "Reactome", visualize_pathways = F
                          )
-CD_RA_clu <- cluster_pathways(CD_RAout, plot_hmap = TRUE)
+CD_RA_clu <- cluster_pathways(CD_RAout, plot_hmap = F)
 exp_mat <- assay(dds[,dds$diagnosis!='UC'])
 cases <- colnames(dds[,dds$diagnosis=='CD'])
 
