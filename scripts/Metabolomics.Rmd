@@ -18,9 +18,9 @@ basepath <- params$basepath
 ```
 
 ```{r setup, warning=FALSE, message=FALSE}
-knitr::opts_knit$set(root.dir=basepath, dpi=600)
-knitr::opts_chunk$set(root.dir = basepath, dpi=600)
-knitr::knit_engines$set(python = reticulate::eng_python)
+knitr::opts_knit$set(root.dir=basepath, dpi=600, cache=TRUE)
+knitr::opts_chunk$set(root.dir = basepath, dpi=600, cache=TRUE)
+knitr::knit_engines$set(python = reticulate::eng_python, cache=TRUE)
 
 library(reticulate)
 reticulate::use_virtualenv(file.path(basepath, '.venv/'), required = T)
