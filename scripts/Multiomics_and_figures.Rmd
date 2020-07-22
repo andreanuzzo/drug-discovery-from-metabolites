@@ -1,0 +1,2174 @@
+---
+title: "Figures"
+params:
+  base_path: '../'
+output:
+  html_document:
+    fig_height: 7
+    fig_width: 9
+    theme: cosmo
+    toc: yes
+  html_notebook:
+    toc: yes
+editor_options:
+  chunk_output_type: inline
+---
+```{r}
+basepath <- params$base_path
+```
+
+```{r setup, warning=FALSE, message=FALSE}
+knitr::opts_knit$set(root.dir=basepath, dpi=600)
+knitr::opts_chunk$set(root.dir = basepath, dpi=600)
+
+library(ComplexUpset)
+library(data.table)
+library(DESeq2)
+library(easyalluvial)
+library(EnhancedVolcano)
+library(janitor)
+library(ggalluvial)
+library(ggsci)
+library(ggthemes)
+library(ggfortify)
+library(ggpubr)
+library(ggrepel)
+library(gghighlight)
+library(ggraph)
+library(ggmosaic)
+library(kableExtra)
+library(igraph)
+library(rstatix)
+library(scales)
+library(splitstackshape)
+library(tidyverse)
+library(tidygraph)
+library(uwot)
+
+select <- dplyr::select
+
+studycolors = c(
+  '#4669bd', 
+  'CD' = '#c25572',
+  'UC' = '#ff9706',
+  'nonIBD' = '#81c404',
+  'ChEMBL'="#3c8c94", #Chembl
+   'Enrichment analysis'='#f4e218', #Enrichment
+   'GWAS'='#fb8072',
+   'Negative' = 'firebrick4',
+   'Positive' = 'steelblue', 
+   'other' = 'black'
+)
+```
+
+# Metabolomics HMP2 study comparison
+
+```{r}
+#Lookup tables
+hmdb_ref <- fread(file.path(basepath,'tmp/hmdb_ref_w_origin.csv'))
+
+#Load results
+metab_results <- fread(file.path(basepath,'results/summaries/master_mbx.tsv'))
+HMP2_metabs <- 
+  readxl::read_xlsx(file.path(basepath,'tmp/Supplementary Tables 1-28.xlsx'), 
+                    sheet=2) %>%
+  left_join(metab_results %>% 
+              select(Metabolites, HMP2_metab), 
+            by = c('Feature'='HMP2_metab')) %>% 
+  distinct_all
+
+
+metabolomics_raw <- readRDS(file.path(basepath,"tmp/metabolomics_raw.Rds"))
+sample_data <- readRDS(file.path(basepath,"tmp/sample_data.Rds"))
+
+```
+
+## UMAP 
+
+```{r}
+
+samumap <- metabolomics_raw %>% 
+  mutate_if(is.numeric, ~replace_na(0)) %>% 
+  select(8:533) %>% 
+  t %>% 
+  umap(n_neighbors = 50)
+
+
+samples.umap <- metabolomics_raw %>% 
+  select(8:533) %>% 
+  names %>% 
+  data.frame(external_id=.) %>% 
+  left_join(sample_data %>% 
+              filter(data_type=='metabolomics') %>% 
+              select(external_id, diagnosis)) %>% 
+  cbind(as.data.frame(samumap))%>% 
+  ggplot() +
+  aes(x=V1, y=V2, color=diagnosis, alpha=0.4) +
+  geom_point()+
+  theme_minimal()+ 
+  theme(panel.border=element_blank(), 
+        legend.background=element_blank())+
+  guides(alpha='none')+
+  scale_color_manual(values = studycolors) + 
+  xlab('UMAP 1') + ylab('UMAP 2')
+```
+
+## Scatterplots
+```{r}
+consensus.mwu <- metab_results %>% 
+  group_by(HMDB) %>%
+  distinct(Metabolites, ranking, MWU_delta, diagnosis) %>% 
+  ggplot(aes(x=MWU_delta, y=ranking, color=diagnosis, label=Metabolites))+
+  geom_jitter(aes(group=diagnosis), position=position_jitterdodge(), alpha=0.7) +
+  facet_grid(.~diagnosis) +
+  geom_text_repel(data = metab_results %>% 
+                    distinct(Metabolites, diagnosis, MWU_delta, ranking) %>%
+                    group_by(diagnosis) %>% 
+                    top_n(10),
+                  box.padding = .5,
+                  show.legend = FALSE)+
+  theme_minimal() + 
+  theme(panel.border=element_blank(), 
+        legend.background=element_blank())+
+  ylab('Consensus score')+
+  xlab('Differential abundance in disease compared to controls')+
+  scale_color_manual(values = studycolors, guide=FALSE)
+```
+
+## Upsets
+```{r, fig.width=12, fig.height=8}
+up.df <-  metab_results %>% 
+  left_join(HMP2_metabs %>% 
+              clean_names %>% 
+              pivot_longer(cols=3:10, 
+                           names_to = c(".value", 'diagnosis'), 
+                           names_pattern = "(.+)_(.+)") %>% 
+              mutate(diagnosis=str_to_upper(diagnosis)) %>% 
+              select(-metabolites), 
+            by=c('HMP2_metab'='feature', 'diagnosis'))  %>%
+  select(-KEGG, -hgncid, -SMILES)%>% 
+  mutate(Metabolites = coalesce(Metabolites, HMP2_metab)) %>% 
+  group_by(HMP2_metab, diagnosis) %>% 
+  distinct(ranking, q_value, .keep_all = T) %>% 
+  summarize(HMDB = unique(HMDB), 
+            ranking=max(ranking), 
+            in_HMP2 = case_when(min(q_value)<0.05~TRUE, TRUE~FALSE), 
+            in_this_study = case_when(ranking>quantile(metab_results$ranking,.75)~TRUE, TRUE~FALSE)) %>% 
+  ungroup %>% 
+  left_join(hmdb_ref %>% 
+              select(HMDB, origin)) %>% 
+  mutate(origin = str_to_lower(origin),
+         origin = case_when(
+           HMP2_metab == '2-hydroxyhexadecanoate' ~ 'endogenous, animal',
+           HMP2_metab == 'alpha-ketoglutarate' ~ 'endogenous, animal, plant, fungi, microbe',
+           HMP2_metab == 'carnosol(.)isomer' ~ 'plant', 
+           HMP2_metab == 'ectoine' ~ 'microbe',
+           HMP2_metab == 'diacetylspermine' ~ 'endogenous',
+           HMP2_metab == 'not available' | origin=='' | is.na(origin) ~ 'other', 
+           TRUE~origin)
+  ) %>%  
+  cSplit('origin',', ','long') %>% 
+  dcast(...~origin) %>% 
+  distinct_all() %>% 
+  mutate_at(vars(7:12), ~.!=0) 
+
+
+
+accessory.df2 <- up.df %>% 
+  upset_data(colnames(up.df)[5:6]) %>% 
+  `[[`('with_sizes')
+
+met.upset.HMP2 <- up.df %>% 
+  upset(colnames(.)[5:6], 
+        width_ratio = 0.2,
+        keep_empty_groups=F,
+        name = 'Intersection of metabolites by study',
+        themes = upset_modify_themes(
+          list(
+            'overall_sizes'=theme(axis.text.x=element_text(angle=90),
+                                  legend.position = 'none')
+          )),
+        base_annotations=list(
+          'Intersection size'= upset_annotate(
+            y = '..count..',
+            geom = list(
+              geom_bar(data=accessory.df2,
+                       aes(fill=diagnosis),
+                       position=position_dodge()),
+              scale_fill_manual(values=studycolors),
+              geom_text(aes(label=..count.., 
+                            y=..count..+20, 
+                            group=diagnosis), 
+                        stat='count', 
+                        position = position_dodge(1))
+            )
+          )
+        ),
+        set_sizes=list(
+          geom_bar(data =up.df %>%
+                     select(1, 5:6) %>% 
+                     distinct_all() %>% 
+                     upset_data(colnames(.)[2:3]) %>% 
+                     `[` (c('intersected','matrix_frame')) %>% 
+                     purrr::reduce(left_join) %>% 
+                     filter(value) %>% 
+                     group_by(group) %>% 
+                     summarize(n_mets = n_distinct(HMP2_metab)) %>% 
+                     ungroup, 
+                   aes(y=n_mets), 
+                   stat = 'identity', 
+                   width = .4),
+          ylab('Prioritized metabolites \nper study'),
+          scale_y_reverse()
+        )
+  )
+
+```
+
+## Scatterplots
+```{r}
+consensus.hmp2.sig <- HMP2_metabs %>% 
+  clean_names %>% 
+  pivot_longer(cols=3:10, 
+               names_to = c(".value", 'diagnosis'), 
+               names_pattern = "(.+)_(.+)") %>% 
+  mutate(diagnosis=str_to_upper(diagnosis)) %>% 
+  select(-metabolites) %>% 
+  full_join(metab_results, 
+            by=c('feature'='HMP2_metab', 'diagnosis'))  %>% 
+  select(-KEGG, -hgncid, -SMILES)%>% 
+  distinct_all %>% 
+  ggplot()+
+  aes(x=q_value, y=ranking, color=diagnosis)+
+  geom_jitter(alpha=0.7)+
+  facet_grid(.~diagnosis) +
+  ylab('Consensus score')+
+  xlab('FDR-adjusted p-value in original HMP2 study')+
+  theme_minimal() + 
+  scale_color_manual(values = studycolors)+
+  geom_smooth(method = 'gam')+
+  theme(legend.position='none')+
+  stat_cor(method = 'spearman',
+          label.y = 1)
+
+consensus.hmp2.ab <- HMP2_metabs %>% 
+  clean_names %>% 
+  pivot_longer(cols=3:10, 
+               names_to = c(".value", 'diagnosis'), 
+               names_pattern = "(.+)_(.+)") %>% 
+  mutate(diagnosis=str_to_upper(diagnosis)) %>% 
+  select(-metabolites) %>% 
+  full_join(metab_results, 
+            by=c('feature'='HMP2_metab', 'diagnosis'))  %>% 
+  select(-KEGG, -hgncid, -SMILES)%>% 
+  distinct_all %>% 
+  ggplot()+
+  aes(x=coefficient, y=MWU_delta, color=diagnosis)+
+  geom_jitter(alpha=0.7)+
+  facet_grid(.~diagnosis) +
+  ylab('Bootstrapped differential abundance')+
+  xlab('Differential Abundance in original HMP2 study')+
+  theme_minimal() + 
+  scale_color_manual(values = studycolors)+
+  geom_smooth(method = 'gam')+
+  theme(legend.position='none')+
+  stat_cor(method = 'spearman',
+          label.y = 2)
+
+```
+
+## Fig1
+```{r, fig.width=12, fig.height=15}
+
+(samples.umap + consensus.mwu + 
+  patchwork::plot_layout(widths = c(1, 1.5))) /
+  met.upset.HMP2 / 
+  (consensus.hmp2.sig | consensus.hmp2.ab) + 
+  patchwork::plot_layout(heights=c(1,1.5, 1), guides='collect')+
+  patchwork::plot_annotation(tag_levels = 'a')
+
+ggsave(file.path(basepath,'results/manuscript_files/Fig1.pdf'), device = 'pdf', width = 12, height = 15, units = 'in')
+```
+
+## Load results
+```{r}
+#Load results
+metab_results <- fread(file.path(basepath,'results/summaries/master_mbx.tsv')) 
+mwu <- fread(file.path(basepath,'results/summaries/mwu_summaries.csv'))
+cm <- readRDS(file.path(basepath,"tmp/cm.Rds"))
+cm2 <- readRDS(file.path(basepath,"tmp/cm2.Rds"))
+cm3 <- readRDS(file.path(basepath,"tmp/cm3.Rds"))
+
+master_mbx <- fread(file.path(basepath,'results/summaries/master_mbx.tsv')) 
+
+htx_results <- 
+  fread(file.path(basepath,'results/summaries/RNASeq_summaries.tsv')) %>%
+  select(hgncid, contains('_CD')) %>%
+  rename_at(vars(contains('_CD')), ~str_remove(.,'_CD'))%>%
+  mutate(diagnosis='CD') %>%
+  rbind(fread(file.path(basepath,'results/summaries/RNASeq_summaries.tsv')) %>% 
+  select(hgncid, contains('_UC')) %>% 
+  rename_at(vars(contains('_UC')), ~str_remove(.,'_UC'))%>% 
+  mutate(diagnosis='UC'))
+
+chembl_similars <- fread(file.path(basepath,'elaborated_data/CHEMBL25.CFP.csv.gz'))%>% 
+  clean_names() %>% 
+  select(HMDB = tar_name, analog=chembl_id, similarity) %>% 
+  mutate(similarity_type = 'Tanimoto') %>% 
+  bind_rows(fread(file.path(basepath,'elaborated_data/CHEMBL25.CFP_Tv05.csv.gz'))%>%
+              clean_names() %>%
+              select(HMDB = tar_name, analog=chembl_id, similarity) %>%
+              mutate(similarity_type = 'Tversky_sub')
+            )%>%
+  bind_rows(fread(file.path(basepath,'elaborated_data/BioMAP_CHEMBL25.CFP.csv')) %>%
+              clean_names() %>% 
+              select(HMDB = tar_name, analog=chembl_id, similarity) %>% 
+              mutate(similarity_type = 'Tanimoto')
+            ) %>%
+  mutate(association='ChEMBL')
+
+
+chembl_assays<-fread(file.path(basepath,'elaborated_data/Chembl_f_assays_BIOME.csv')) %>% 
+  # bind_rows(fread(file.path(basepath,'elaborated_data/Chembl_assays_BioMAP_BIOME.csv'))) %>% 
+  mutate(association='ChEMBL') %>% 
+  drop_na() %>% 
+  mutate(type = case_when(
+    grepl('EC|AC|activation|\\bagonist\\b', standard_type, ignore.case=T) ~ 'Positive',
+    grepl('IC|Ki|inhibition|antagonist', standard_type, ignore.case=T) ~ 'Negative',
+    # grepl('antagonist', assay_description, ignore.case = T) ~ 'Antagonist',
+    # grepl('\\b[A,a]gonist\\b',assay_description) ~ 'Agonist',
+    is.na(standard_type) ~ NA_character_,
+    TRUE ~ 'other')) %>% 
+  select(analog=compound_chembl_id, 
+         pxc50 = pchembl_value,
+         type,
+         hgncid) %>%
+  distinct_all
+
+
+target_prioritization <- metab_results %>% 
+  mutate(Metabolites = coalesce(Metabolites, HMP2_metab)) %>% 
+  select(-hgncid) %>% 
+  distinct_all %>% 
+  left_join(chembl_similars) %>% 
+  select(Metabolites, HMDB, ranking, MWU_delta, diagnosis, 
+         direct_parent, super_class, analog, association, 
+         similarity, similarity_type) %>% 
+  left_join(chembl_assays) %>% 
+  drop_na(Metabolites, HMDB, ranking, analog, similarity, hgncid) %>% 
+  distinct_all %>% 
+  drop_na(HMDB, hgncid) %>% 
+  left_join(htx_results, by = c('hgncid', 'diagnosis')) %>%
+  distinct_all
+
+```
+
+## Connect with targets
+```{r}
+t_classes <- fread(file.path(basepath, 'tmp/Target_annotation.csv')) %>% 
+  readr::type_convert()
+hmdb_ref <- fread(file.path(basepath,'tmp/hmdb_ref_w_origin.csv'))
+
+
+HMP2_important_metabs <- 
+  readxl::read_xlsx(file.path(basepath,'tmp/Supplementary Tables 1-28.xlsx'), 
+                    sheet=2) %>%
+  left_join(metab_results %>% 
+              select(Metabolites, HMP2_metab), 
+            by = c('Feature'='HMP2_metab')) %>% 
+  distinct_all %>% 
+  clean_names() %>% 
+  filter(minimum_q_value<0.05) 
+
+pri.met <- target_prioritization %>%  
+  filter(ranking > quantile(ranking, .75))  %>% 
+  filter(pxc50 > 5.5,
+         ifelse(similarity_type == 'Tanimoto', 
+                similarity > 0.85, 
+                similarity >0.95)) %>% 
+  group_by(hgncid) %>%
+  mutate(
+    mHits = n_distinct(HMDB)
+    ) %>%
+  mutate(
+    Metab_hits = paste0(
+      unique(Metabolites),
+      collapse = "; ")
+    ) %>%
+  ungroup %>%
+  group_by(HMDB) %>%
+  mutate(
+    gHits = n_distinct(hgncid)
+    ) %>%
+  mutate(
+    gene_hits = paste0(
+      unique(hgncid),
+      collapse = "; ")
+    ) %>%
+  ungroup %>% 
+  filter(gHits < 16) %>%
+  arrange(desc(ranking)) %>%
+  distinct_all %>% 
+  group_by(Metabolites, hgncid) %>% 
+  filter(pxc50==max(pxc50)) %>% 
+  ungroup %>% 
+  left_join(hmdb_ref %>% 
+              select(Metabolites, super_class)) %>% 
+  left_join(t_classes %>% 
+              select(hgncid, targetclass)) %>% 
+  distinct_all %>% 
+  group_by(super_class) %>% 
+  mutate(n_mets = n_distinct(Metabolites), 
+         n_conn = n_distinct(targetclass))%>% 
+  group_by(targetclass) %>% 
+  mutate(n_targets = n_distinct(hgncid)) %>% 
+  ungroup
+
+
+```
+
+## Fig 2
+```{r}
+mets.hist <- pri.met %>% 
+  group_by(super_class) %>% 
+  mutate(n_mets=n_distinct(Metabolites)) %>% 
+  group_by(super_class, type, targetclass) %>% 
+  summarize(n_targets=length(unique(hgncid)), 
+            n_mets = max(n_mets)) %>% 
+  ggplot()+
+  aes(x=fct_rev(super_class),
+      y=n_targets, 
+      fill=targetclass)+
+  geom_bar(stat='identity')+
+  geom_text(data = pri.met %>% 
+              group_by(super_class, type) %>% 
+              summarize(n_mets=n_distinct(Metabolites)),
+              aes(x=super_class,
+                  y=-1, 
+                  label=n_mets), 
+            inherit.aes = F, 
+            size=3)+
+  coord_flip()+
+  facet_grid(type~., scales = 'free', space = 'free')+
+  theme_minimal()+
+  scale_fill_tableau('Tableau 20', na.value='grey')+
+  guides(fill=guide_legend(ncol=1, title = 'Target classes'))+
+  theme(legend.position = 'left')+
+  labs(x='Metabolite class', y = 'Number of connected targets per interaction type')
+  
+met.alluv <-  pri.met %>% 
+  distinct(Metabolites, hgncid, .keep_all = T) %>% 
+  group_by(Metabolites, targetclass) %>% 
+  mutate(nconn = n_distinct(hgncid)) %>% 
+  group_by(targetclass) %>% 
+  mutate(n_targs=n_distinct(hgncid)) %>% 
+  ungroup %>% 
+  arrange(nconn) %>% 
+  mutate(super_class=factor(super_class), 
+         type=factor(type),
+         targetclass=factor(targetclass)) %>% 
+  select(super_class, type, targetclass) %>% 
+  alluvial_wide(stratum_label_size = 3,
+                order_levels = c('other','Positive','Negative'), 
+                col_vector_flow = c(tableau_color_pal('Tableau 20')(length(unique(pri.met$targetclass))-1), 
+                                    'grey'), 
+                stratum_labels = F, 
+                fill_by = 'last_variable') +
+  geom_text_repel(aes(label = case_when(
+    value=='Enzyme_all_others'~ as.character(na.omit(unique(pri.met[pri.met$targetclass=='Enzyme_all_others',]$n_targets))),
+    value=='7TM_Group1'~ as.character(na.omit(unique(pri.met[pri.met$targetclass=='7TM_Group1',]$n_targets))),
+    value=='Other'~ as.character(na.omit(unique(pri.met[pri.met$targetclass=='Other',]$n_targets))),
+    value=='Transcriptional_Factor_all_others'~ as.character(na.omit(unique(pri.met[pri.met$targetclass=='Transcriptional_Factor_all_others',]$n_targets))),
+    value=='Nuclear Receptor'~ as.character(na.omit(unique(pri.met[pri.met$targetclass=='Nuclear Receptor',]$n_targets))),
+    value=='Kinase_Protein'~ as.character(na.omit(unique(pri.met[pri.met$targetclass=='Kinase_Protein',]$n_targets))),
+    value=='Ion Channel'~ as.character(na.omit(unique(pri.met[pri.met$targetclass=='Ion Channel',]$n_targets))),
+    value=='Transporter'~ as.character(na.omit(unique(pri.met[pri.met$targetclass=='Transporter',]$n_targets))),
+    value=='Protease'~ as.character(na.omit(unique(pri.met[pri.met$targetclass=='Protease',]$n_targets))),
+    # value=='7TM_all_others'~ as.character(na.omit(unique(pri.met[pri.met$targetclass=='7TM_all_others',]$n_targets))),
+    # value=='Receptor_all_others'~ as.character(na.omit(unique(pri.met[pri.met$targetclass=='Receptor_all_others',]$n_targets))),
+    # value=='Enzyme_Esterase'~ as.character(na.omit(unique(pri.met[pri.met$targetclass=='Enzyme_Esterase',]$n_targets))),
+    # value=='Enzyme_Transferase'~ as.character(na.omit(unique(pri.met[pri.met$targetclass=='Enzyme_Transferase',]$n_targets))),
+    # value=='Extracellular Ligand'~ as.character(na.omit(unique(pri.met[pri.met$targetclass=='Extracellular Ligand',]$n_targets))),
+    is.na(value)~ as.character(unique(pri.met[is.na(pri.met$targetclass),]$n_targets)),
+    )),
+    stat = "stratum", 
+    direction = "y", 
+    size=3,
+    nudge_x = .2,
+    color='#141414')+
+  geom_text_repel(aes(label= ifelse(..stratum.. %in% pri.met$super_class, as.character(..stratum..), NA)), 
+                  stat = "stratum", 
+                  direction = "y", 
+                  size=3,
+                  nudge_x = -1,
+             color='#141414')+
+  geom_label(aes(label= ifelse(..stratum.. %in% pri.met$type, as.character(..stratum..), NA)), 
+             stat = "stratum",
+             size=3,
+             color='#141414')+
+  theme_minimal()+
+  scale_x_discrete(labels = c('Metabolite class','Interaction type','Target class'))+
+  labs(y='Interactions')
+
+
+
+ggarrange(
+  ggarrange(mets.hist+guides(fill='none'),
+            met.alluv, 
+            ncol = 1, 
+            labels = 'auto', 
+            heights = c(2,3)),
+  cowplot::get_legend(mets.hist),
+  widths = c(8,1)
+)
+
+ggsave(file.path(basepath,'results/manuscript_files/Fig2.pdf'), device = 'pdf', width = 12, height = 9, units = 'in')
+```
+
+# Host Transcriptomics
+## Load data
+
+```{r}
+htx.sample_data <- readRDS(file.path(basepath,"tmp/htx.sample_data.Rds"))
+cts <- readRDS(file.path(basepath,"tmp/cts.Rds"))
+res1 <- readRDS(file.path(basepath,"tmp/res1.Rds"))
+res2 <- readRDS(file.path(basepath,"tmp/res2.Rds"))
+res1df <- readRDS(file.path(basepath,"tmp/res1df.Rds"))
+res2df <- readRDS(file.path(basepath,"tmp/res2df.Rds"))
+
+```
+
+
+## UMAP
+
+```{r}
+sam.umap <- t(cts) %>% 
+  as.data.frame %>% 
+  rownames_to_column('external_id') %>% 
+  left_join(htx.sample_data %>% 
+              rownames_to_column('external_id') %>% 
+              select(external_id, diagnosis, biopsy_location))%>% 
+  umap(n_neighbors = 50)
+
+samples.umap.diag <- t(cts) %>% 
+  as.data.frame %>%
+  data.frame(external_id=rownames(.)) %>% 
+  left_join(htx.sample_data %>% 
+              rownames_to_column('external_id') %>% 
+              select(external_id, diagnosis, biopsy_location)) %>% 
+  cbind(as.data.frame(sam.umap))%>% 
+  ggplot() +
+  aes(x=V1, y=V2, color=diagnosis, alpha=0.8) +
+  geom_point()+
+  theme_minimal()+ 
+  theme(panel.border=element_blank(), 
+        legend.background=element_blank())+
+  guides(alpha='none')+
+  scale_color_manual(values = studycolors) + 
+  xlab('UMAP 1') + ylab('UMAP 2')
+
+samples.umap.biopsy <- t(cts) %>% 
+  as.data.frame %>%
+  data.frame(external_id=rownames(.)) %>% 
+  left_join(htx.sample_data %>% 
+              rownames_to_column('external_id') %>% 
+              select(external_id, diagnosis, biopsy_location)) %>% 
+  cbind(as.data.frame(sam.umap))%>% 
+  ggplot() +
+  aes(x=V1, y=V2, color=biopsy_location, alpha=0.8) +
+  geom_point()+
+  theme_minimal()+ 
+  theme(panel.border=element_blank(), 
+        legend.background=element_blank())+
+  guides(alpha='none')+
+  scale_color_tableau() + 
+  xlab('UMAP 1') + ylab('UMAP 2')
+
+```
+
+## Volcano plots
+
+```{r}
+labels <- res1df %>% 
+  top_n(-5, log2FoldChange)%>% 
+  bind_rows(res1df %>% 
+              top_n(10, log2FoldChange)) %>% 
+  mutate(diagnosis='UC') %>% 
+  bind_rows(res2df %>%
+              top_n(-5, log2FoldChange)%>%
+              bind_rows(res2df %>% 
+                          top_n(10, log2FoldChange)) %>% 
+              mutate(diagnosis='CD'))
+
+htx.volcano <- as.data.frame(res1)%>% 
+  mutate(diagnosis='UC') %>% 
+  bind_rows(as.data.frame(res2) %>% 
+  mutate(diagnosis='CD')) %>% 
+  ggplot()+
+  aes(x=log2FoldChange, 
+      y = -log(padj), 
+      color=diagnosis)+
+  geom_point(alpha=.75)+
+  gghighlight(-log(padj)>2,
+              abs(log2FoldChange)>.5, 
+              calculate_per_facet=T)+
+  geom_text_repel(data = labels, 
+                  aes(label=hgncid), 
+                  box.padding = 1, 
+                  size = 3)+
+  facet_grid(.~diagnosis) +
+  theme_minimal() + 
+  xlab( bquote(~Log[2]~ 'FC'))+
+  ylab(bquote(~-Log[10]~adjusted~italic(p)~'-value'))+
+  scale_color_manual(values = studycolors)
+
+```
+
+
+## Htx vs Mbx 
+
+```{r}
+mbx.htx.data <- target_prioritization %>% 
+  select(hgncid, Metabolites, MWU_delta, analog, ranking,
+         pxc50, similarity, similarity_type, type,
+         log2FoldChange, padj, Pathway, Fold_Enrichment, highest_p, 
+         diagnosis) %>% 
+  filter(ranking > quantile(ranking, .75) | !is.na(log2FoldChange),
+         pxc50 > 5.5,
+         ifelse(similarity_type == 'Tanimoto', similarity > 0.85, similarity >0.95)) %>% 
+  group_by(hgncid) %>%
+  mutate(
+    mHits = n_distinct(Metabolites)
+  ) %>%
+  mutate(
+    Metab_hits = paste0(
+      unique(Metabolites),
+      collapse = "; ")
+  ) %>%
+  ungroup %>%
+  group_by(Metabolites) %>%
+  mutate(
+    gHits = n_distinct(hgncid)
+  ) %>%
+  mutate(
+    gene_hits = paste0(
+      unique(hgncid),
+      collapse = "; ")
+  ) %>%
+  ungroup %>% 
+  filter(gHits <= 20, 
+         mHits <= 20) %>%
+  arrange(desc(ranking)) %>%
+  distinct_all %>% 
+  rename(Targets=hgncid) %>% 
+  group_by(Metabolites, Targets, type) %>% 
+  filter(pxc50 == max(pxc50)) %>% glimpse
+
+label_data <- 
+  mbx.htx.data %>% 
+  group_by(diagnosis) %>% 
+  filter(#abs(MWU_delta) > quantile(abs(MWU_delta), .75, na.rm=T), 
+         #abs(log2FoldChange) > quantile(abs(log2FoldChange), .75, na.rm=T),
+    Targets %in% c('CXCR1', 'CXCR2', 'HCAR2', 'GPR119','CHRNB2','NOS2'),
+    Metabolites %in% c('Nicotinic acid','Ibuprofen', '2-Hydroxyibuprofen',
+                       'Hydrocarboxylic acid','Trigonelline', 'Linoleoyl ethanolamide',
+                       'L-Acetylcarnitine','L-arginine')
+  ) %>% 
+  ungroup %>% 
+  distinct(Targets, Metabolites, diagnosis, log2FoldChange, MWU_delta, type) %>% 
+  mutate(labpos.mbx=case_when(diagnosis=='CD' ~ -2.5, diagnosis=='UC'~5),
+         labpos.htx=case_when(diagnosis=='CD' ~ -1, diagnosis=='UC'~1)) %>% 
+  distinct_all()
+
+mbx.htx.plot <- mbx.htx.data%>% 
+  ggplot()+
+  aes(x=MWU_delta, y=log2FoldChange)+
+  geom_point(aes(size=-log(padj), alpha=ranking, color=diagnosis), show.legend = TRUE)+ 
+  theme_minimal() +
+  scale_color_manual(values = studycolors)+
+  geom_text_repel(data=label_data,
+                  aes(label=Metabolites, y=labpos.mbx,
+                      color=type),
+                  angle=90, direction = 'x',
+                  show.legend = F
+                  )+
+  geom_vline(data=label_data,
+             mapping = aes(xintercept = MWU_delta, color=type),
+             linetype="dotdash")+
+  geom_text_repel(data=label_data,
+                  aes(label=Targets, x=labpos.htx),
+                  color='green4',
+                  direction = 'y',show.legend = F)+
+  geom_hline(data=label_data,
+             mapping = aes(yintercept = log2FoldChange),
+             linetype="dotdash", color='green4', size=.5)+
+  geom_point(data=label_data,
+             shape=13, color='brown4', size=8)+
+  facet_grid(~diagnosis)+
+  xlab('Metabolite differential abundance')+
+  ylab('Target differential expression') +
+  geom_vline(xintercept = 0)+
+  geom_hline(yintercept = 0)+
+  guides(alpha=guide_legend(title='Metabolite consensus scoring'),
+         size=guide_legend(
+           title = bquote(atop("Target significance",
+                               "(Log"[10]~adjusted~italic(p)~'-value)'))
+         )
+         
+  ) 
+
+```
+
+## Fig 3
+```{r}
+ggarrange(
+  ggarrange(samples.umap.biopsy+
+              theme(legend.position = 'left')+
+              guides(color=guide_legend(ncol=1)), 
+            htx.volcano, 
+            labels='auto',
+            widths = c(4,5)),
+  # pwy.plot,
+  mbx.htx.plot +
+    theme(legend.position = 'left'),
+  nrow = 2, 
+  heights = c(2,4),
+  labels = c('','c'))
+
+ggsave(file.path(basepath,'results/manuscript_files/Fig3.pdf'), device = 'pdf', width = 12, height = 10, units = 'in')
+```
+
+# Genetic associations
+```{r}
+IBD_pathways <- fread(file.path(basepath,'elaborated_data/Graham_Xavier_2020.tsv')) %>% 
+    cSplit('action',';','long') %>% 
+    cSplit('hgncid',';','long') %>% 
+    group_by(hgncid) %>% 
+    summarize(action=paste(unique(action),collapse='; '), 
+              source=paste(unique(source),collapse='; ')
+              )
+
+data<- utils::data
+gwas_catalog <- fread(file.path(basepath,'elaborated_data/gwas_catalog_v1.0-associations_e100_r2020-07-14.tsv.gz'))
+  
+ids = grep("inflammatory|crohn|colitis|monocyte|lymphocyte", gwas_catalog$`DISEASE/TRAIT`, ignore.case = T)
+IBD_Gwases = gwas_catalog[ids] %>% 
+  as_tibble() %>% 
+  cSplit('MAPPED_GENE',', ','long') %>% 
+  cSplit('MAPPED_GENE',' - ','long') %>% 
+  dplyr::rename(hgncid=MAPPED_GENE)
+
+omim.table <- fread(file.path(basepath,'elaborated_data/Omim.table.csv'))
+
+```
+
+
+```{r}
+target_prioritization_ge <- omim.table%>% 
+  distinct(hgncid) %>% 
+  full_join(IBD_Gwases) %>% 
+  full_join(IBD_pathways) %>% 
+  inner_join(target_prioritization) %>%
+  group_by(hgncid, Metabolites, diagnosis) %>% 
+  mutate(candidates = 
+           case_when(MWU_delta<0 & type=='Negative'~ 'Negative modulator (scarce)', 
+                     MWU_delta<0 & type=='Positive'~ 'Positive modulator (scarce)', 
+                     MWU_delta>0 & type=='Positive'~ 'Positive modulator (abundant)', 
+                     MWU_delta>0 & type=='Negative'~ 'Negative modulator (abundant)', 
+                     TRUE~'Unknown')) %>% 
+  filter(candidates != 'Unknown', 
+         pxc50 > 5.5, 
+         similarity>0.8) %>%
+  group_by(hgncid) %>% 
+  mutate(
+    mHits = n_distinct(HMDB)
+  ) %>%
+  ungroup %>% 
+  group_by(HMDB) %>% 
+  mutate(
+    gHits = n_distinct(hgncid)
+  ) %>% 
+  ungroup %>% 
+  arrange(desc(ranking)) %>%
+  distinct_all %>% 
+  drop_na(hgncid)
+
+metabolites <- target_prioritization_ge %>% 
+  select(label=Metabolites, weight=MWU_delta, significance=ranking, diagnosis) %>% 
+  mutate(weight = sign(weight)) %>% 
+  distinct_all
+
+analogs <- target_prioritization_ge %>% 
+  distinct(analog, diagnosis) %>% 
+  rename(label=analog)
+
+genes <- target_prioritization_ge %>% 
+  select(label=hgncid, 
+         weight=log2FoldChange, 
+         significance=padj, 
+         diagnosis) %>% 
+  mutate(weight = sign(weight), 
+         significance = replace_na(atan(-log(significance)), 0)) %>% 
+  distinct_all
+
+pwy <- target_prioritization_ge %>% 
+  select(label=Pathway, 
+         weight=Fold_Enrichment, 
+         significance = padj,
+         diagnosis) %>% 
+  mutate(weight = sign(weight), 
+         significance = replace_na(atan(-log(significance)), 0)) %>% 
+  distinct_all
+
+dis.traits <- target_prioritization_ge %>%
+  group_by(hgncid, `DISEASE/TRAIT`) %>% 
+  filter(PVALUE_MLOG==max(PVALUE_MLOG), !is.na(`DISEASE/TRAIT`)) %>% 
+  ungroup %>% 
+  select(label=`DISEASE/TRAIT`, 
+         significance = PVALUE_MLOG, diagnosis) %>%
+  distinct_all
+
+nodes <- 
+  metabolites %>% 
+  full_join(analogs) %>% 
+  full_join(genes) %>% 
+  full_join(pwy) %>% 
+  full_join(dis.traits) %>% 
+  distinct(label, diagnosis, .keep_all = T) %>% 
+  rowid_to_column("id")
+
+similarities <-
+  target_prioritization_ge %>% 
+  distinct(Metabolites, analog, association, 
+           similarity, similarity_type) %>% 
+  left_join(nodes, by = c("Metabolites" = "label")) %>% 
+  rename(from = id) %>% 
+  left_join(select(nodes, label, id), 
+            by = c("analog" = "label")) %>% 
+  rename(to = id) %>% 
+  select(from, to, everything())
+
+assays <- 
+  target_prioritization_ge %>% 
+  group_by(analog, hgncid) %>% 
+  filter(pxc50 == max(pxc50)) %>% 
+  ungroup %>% 
+  distinct(analog, hgncid, pxc50, type)%>% 
+  left_join(nodes, by = c("analog" = "label")) %>% 
+  rename(from = id, 
+         association = type)%>% 
+  left_join(select(nodes, label, id), 
+            by = c("hgncid" = "label")) %>% 
+  rename(to = id) %>% 
+  select(from, to, everything())
+
+pwy_e <- 
+  target_prioritization_ge %>% 
+  distinct(hgncid, pathway_enrichment,Pathway)%>% 
+  mutate(association = 'Enrichment analysis') %>% 
+  left_join(nodes, by = c("hgncid" = "label")) %>% 
+  rename(from = id)%>% 
+  left_join(select(nodes, label, id), 
+            by = c("Pathway" = "label")) %>% 
+  rename(to = id) %>% 
+  select(from, to, everything()) %>% 
+  drop_na
+  
+dis.tr_e <- 
+  target_prioritization_ge %>% 
+  group_by(hgncid, `DISEASE/TRAIT`) %>% 
+  filter(PVALUE_MLOG==max(PVALUE_MLOG)) %>% 
+  ungroup %>% 
+  select(hgncid, PVALUE_MLOG, `DISEASE/TRAIT`) %>% 
+  distinct_all%>% 
+  mutate(association = 'GWAS') %>% 
+  left_join(nodes, by = c("hgncid" = "label")) %>% 
+  rename(from = id)%>% 
+  left_join(select(nodes, label, id), 
+            by = c("DISEASE/TRAIT" = "label")) %>% 
+  rename(to = id) %>% 
+  select(from, to, everything()) %>% 
+  drop_na(`DISEASE/TRAIT`)
+
+m2a <- graph_from_data_frame(d = similarities, vertices = nodes, directed = FALSE) %>% as_tbl_graph()
+
+a2g <- graph_from_data_frame(d = assays, vertices = nodes, directed = FALSE) %>% as_tbl_graph()
+
+g2d <- graph_from_data_frame(d = dis.tr_e, vertices = nodes, directed = FALSE) %>% as_tbl_graph()
+
+g2p <- graph_from_data_frame(d = pwy_e, vertices = nodes, directed = FALSE) %>% as_tbl_graph()
+  
+fg <- m2a %>% 
+  graph_join(a2g)%>% 
+  graph_join(g2p) %>% 
+  graph_join(g2d) %>% 
+  activate('edges') %>% 
+  mutate(`Similarity or binding`= 
+           case_when(similarity_type =='Tanimoto' & similarity < 0.8 ~ 'weak',
+                     similarity_type=='Tanimoto' & similarity >= 0.8 & similarity < 0.9 ~ 'good', 
+                     similarity_type=='Tanimoto' & similarity >= 0.9 ~ 'strong',
+                     similarity_type =='Tversky_sub' & similarity < 0.9 ~ 'weak',
+                     similarity_type=='Tversky_sub' & similarity >= 0.9 & similarity < 0.95 ~ 'good', 
+                     similarity_type=='Tversky_sub' & similarity >= 0.95 ~ 'strong', 
+                     pxc50 < 5.5 ~ 'weak',
+                     pxc50 >= 5.5 & pxc50 < 7 ~ 'good',
+                     pxc50 >= 7 ~ 'strong',
+                     TRUE~NA_character_)) %>% 
+  mutate(`Similarity or binding`=factor(`Similarity or binding`, 
+                                        levels = c(NA,'weak','good','strong'), 
+                                        ordered = TRUE)) %>% 
+  activate('nodes')
+
+quicknet <- autograph(fg, 
+       #node_label = label,
+       node_colour = weight,
+       edge_colour = association) 
+
+quicknet + facet_nodes(diagnosis~.)
+
+```
+## Fig 4
+
+```{r, fig.width=14, fig.width=15}
+test_genes <- target_prioritization_ge%>%
+  distinct(hgncid) %>%
+  pull
+
+saveplots <- 'results/summaries/target_plots/'
+
+dir.create(file.path(basepath,saveplots))
+
+plotlist <- list()
+
+create_graph <- function(i){
+  
+  gene_of_interest <- test_genes[i]
+
+  subnet <- fg%>% 
+    tidygraph::as.igraph() %>% 
+    neighborhood(nodes = fg %>% 
+                   filter(label ==gene_of_interest) %>% 
+                   as.data.frame() %>% 
+                   `$` (name) %>%  
+                   as.numeric, 
+                 order =2
+    )
+  if(length(subnet)>0){
+  
+   gg <- igraph::induced_subgraph(fg, vids = unlist(subnet)) %>% 
+    tidygraph::as_tbl_graph() %>% 
+    ggraph(layout = 'linear', circular = TRUE) +
+    geom_node_point(aes(size=significance), trans='sqrt') +
+    geom_edge_arc(aes(color=association, alpha=`Similarity or binding`)) + 
+    scale_edge_color_manual(values = studycolors,
+                            na.value = '#343642',
+                            drop = FALSE) + #Network
+    scale_edge_alpha_discrete(limits = c('weak','good','strong'))+
+    geom_node_label(check_overlap = TRUE, 
+                    repel = TRUE,
+                    mapping = aes(label=label, 
+                                  colour=weight),
+                    box.padding=1, 
+                    direction='y') + 
+    scale_color_gradient2_tableau(limits=c(-2,2)) +
+    theme_graph(border = F,foreground = 'steelblue', fg_text_colour = 'white', base_family = 'Helvetica')+
+    theme(legend.position = 'right', legend.text = element_text(size=10))
+   
+   
+   if(n_distinct(gg$data[gg$data$label==gene_of_interest,]$diagnosis)>1){
+
+     plotlist[[i]] <- gg + facet_nodes(~diagnosis)
+     
+   }else{
+
+     plotlist[[i]] <- gg + facet_edges(~diagnosis)
+     
+   }
+
+    ggsave(paste0(file.path(basepath,saveplots), gene_of_interest, '.png'),
+           device = 'png', dpi = 720,height = 10,  width = 16)
+    
+    plotlist[[i]]
+    
+  }else{
+  cat('Cannot plot subnet for',  gene_of_interest, '\n')
+    }
+}
+
+plotlist <- lapply(seq(length(test_genes)), create_graph)
+
+plt1 <- plotlist[match('NOS2', test_genes)]
+plt234<- plotlist[match(c('HTR4','GABRG2','SLC22A3'), test_genes)]
+
+ggpubr::ggarrange(ggpubr::ggarrange(plotlist = plt1, 
+                                    common.legend = T, 
+                                    ncol=1, legend = 'none'),
+                  ggpubr::ggarrange(plotlist = plt234, 
+                                    labels=c('b','c','d'), 
+                                    common.legend = T, 
+                                    legend='none', 
+                                    ncol=1, 
+                                    heights = c(2,3,2)),
+                  cowplot::get_legend(plt1[[1]]),
+                  ncol = 3,
+                  labels=c('a',''), 
+                  widths = c(3,2.5, 1))
+
+ggsave(file.path(basepath,'results/manuscript_files/Fig4.pdf'), device = 'pdf', width = 22, height = 16, units = 'in')
+
+```
+
+# BioMAP
+## Fig 5
+```{r BioMAP, fig.width=5, fig.height=9}
+bioMAP_plot <- readxl::read_xlsx(file.path(basepath, 'elaborated_data/Supplementary_Table5.xlsx'),sheet = 1) %>% 
+  group_by(metabolite, assay_name_required) %>%
+  arrange(concentration_molar) %>% 
+  mutate(conc_levels = log1p(1000*as.numeric(concentration_molar))) %>% 
+  ungroup %>% 
+  arrange(metabolite, conc_levels, bio_marker_name_s_required) %>% 
+  mutate(metabolite = str_replace(metabolite, 'Butyric acid', 'Butyrate'),
+         metabolite=factor(metabolite, 
+                           levels=c('Butyrate', 'Niacin', 
+                                    'alpha-CEHC', 'Oleanolic acid'), 
+                           ordered = T)) %>% 
+  filter(system_name_required %in% c('BT', 'CASM3C','HDF3CGF')) %>% 
+  ggplot()+
+  aes(y=log_ratio_required, x=bio_marker_name_s_required)+
+  facet_grid(metabolite~system_name_required, scales = 'free', space = 'free_x')+
+  theme_minimal()+
+  geom_ribbon(aes(ymin=-significance_prediction_envelope_at_95_percent, ymax=significance_prediction_envelope_at_95_percent), group=1, alpha=0.2) +
+  geom_line(aes(color=conc_levels, group=concentration_molar), alpha=.8) +
+  scale_color_gradient2_tableau(name='Metabolite\nconcentration\n(log mM)')+
+  theme(axis.text.x = element_text(angle=90, size = 8, vjust = .8), 
+        legend.text = element_text(angle=45, size = 8, hjust = 1), 
+        legend.position = 'bottom',
+        panel.spacing = unit(.7 , "lines"))+
+  ylab('LogFC vs control')+
+  xlab('Biomarkers')
+
+
+bioMAP_plot
+ggsave(file.path(basepath,'results/manuscript_files/Fig5a.pdf'), device = 'pdf', width = 5, height = 10, units = 'in')
+```
+
+# Metabolomics results
+
+## Volcano plot
+```{r}
+mwu.volcano <- mwu%>% 
+  select(HMDB, contains('pval')) %>%
+  pivot_longer(-HMDB,
+               names_to = 'diagnosis', 
+               names_pattern = '.*(..)',
+               values_to = 'pvalue_mwu', 
+               values_drop_na = TRUE) %>% 
+  full_join(mwu%>% 
+              select(HMDB, contains('diff')) %>%
+              pivot_longer(-HMDB,
+                           names_to = 'diagnosis', 
+                           names_pattern = '.*(..)',
+                           values_to = 'delta', 
+                           values_drop_na = TRUE)) %>% 
+  distinct_all %>% 
+  mutate(logq = -log(pvalue_mwu)) %>% 
+  ggplot(aes(x=delta, y=logq, color=diagnosis))+
+  geom_jitter(aes(group=diagnosis), position=position_jitterdodge(), alpha=0.7) +
+  facet_grid(.~diagnosis) +
+  theme_minimal()+
+  ylab(bquote(~Scaled~significance~(-log(italic(q)~-value))))+
+  xlab('Differential abundance in disease compared to controls')+
+  scale_color_manual(values = studycolors)
+  
+```
+## XGB
+```{r}
+xgb.cm <- cm$table %>% 
+  t %>% 
+  `[`(,ncol(.):1) %>% 
+  melt %>% 
+  ggplot(aes(x=Reference, y=Prediction, fill=value)) + 
+  geom_tile()+
+  theme_minimal()+
+  scale_fill_gradient(low='white',high=studycolors[1])+
+  xlab("True")+
+  ylab("Predicted")+
+  theme(axis.text.x=element_text(angle=45,hjust=1,vjust=1),
+        legend.position = 'bottom')+
+  geom_text(aes(label = value), vjust = -.5)+
+  geom_text(aes(label = percent(value/sum(value))), vjust = 1)
+
+xgb.fi <- fread(file.path(basepath,'results/ML/mbx_XGB_fi.csv')) %>% 
+  top_n(20) %>%
+  ggplot(aes(x=reorder(features, percentage), 
+             y=percentage))+
+  geom_histogram(stat = 'identity', 
+                 fill = studycolors[1])+
+  ylab('Feature importance')+
+  scale_y_continuous(labels = scales::percent_format(scale = 1e2, accuracy = .1))+
+  xlab('')+
+  coord_flip()+
+  theme_minimal()
+
+xgb.shap <- fread(file.path(basepath,'results/ML/mbx_XGB_shapi.csv')) %>%
+  rowwise() %>% 
+  mutate(wt = sum(nonIBD, UC, CD)) %>%
+  ungroup %>% 
+  top_n(n = 20) %>% 
+  select(-wt) %>% 
+  melt %>% 
+  ggplot(aes(x=reorder(mbx, value),
+             y=value, 
+             color=variable, 
+             fill=variable))+
+  geom_bar(stat='identity') +
+  coord_flip()+
+  theme_minimal()+
+  xlab('')+
+  ylab('SHAP values')+
+  scale_fill_manual(name = 'diagnosis', 
+                    values=studycolors)+
+  scale_color_manual(name = 'diagnosis',
+                     values=studycolors)+
+  theme(legend.position = 'right')
+
+xgb.plot <- ggarrange(xgb.cm+
+  theme(legend.position = 'none'), 
+  xgb.fi, 
+  xgb.shap+
+  theme(legend.position = 'none'), 
+  nrow = 1, 
+  widths = c(2,3,4))
+```
+
+## GMML
+### Cluster type
+```{r}
+gmml.cm <- cm2$table %>% 
+  t %>% 
+  `[`(,ncol(.):1) %>% 
+  melt %>% 
+  ggplot(aes(x=Reference, y=Prediction, fill=value)) + 
+  geom_tile()+
+  theme_minimal()+
+  scale_fill_gradient(low='white',high=studycolors[1])+
+  xlab("True")+
+  ylab("Predicted")+
+  theme(axis.text.x=element_text(angle=45,hjust=1,vjust=1),
+        legend.position = 'bottom')+
+  geom_text(aes(label = value), vjust = -.5)+     
+  geom_text(aes(label = percent(value/sum(value))), vjust = 1)
+
+gmml.fi <- fread(file.path(basepath,'results/GMML/mbx_gmme_XGBClassifier_fi.csv'))  %>% 
+  top_n(20) %>%
+  ggplot(aes(x=reorder(features, percentage), 
+             y=percentage))+
+  geom_histogram(stat = 'identity', 
+                 fill = studycolors[1])+
+  ylab('Feature importance')+
+  scale_y_continuous(labels = scales::percent_format(scale = 1e2, accuracy = .1))+
+  xlab('')+
+  coord_flip()+
+  theme_minimal()
+
+gmml.shap <- fread(file.path(basepath,'results/GMML/mbx_gmme_XGBClassifier_shapi.csv'))%>%
+  rowwise() %>% 
+  mutate(wt = sum(nonIBD, UC, CD)) %>%
+  ungroup %>% 
+  top_n(n = 20) %>% 
+  select(-wt) %>% 
+  melt %>% 
+  ggplot(aes(x=reorder(mbx, value),
+             y=value, 
+             color=variable, 
+             fill=variable))+
+  geom_bar(stat='identity') +
+  coord_flip()+
+  theme_minimal()+
+  xlab('')+
+  ylab('SHAP values')+
+  scale_fill_manual(name = 'diagnosis', 
+                    values=studycolors)+
+  scale_color_manual(name = 'diagnosis',
+                     values=studycolors)+
+  theme(legend.position = 'right')
+```
+
+### Mixed effects type
+```{r}
+gmml.me.cm <- cm3$table %>% 
+  t %>% 
+  `[`(,ncol(.):1) %>% 
+  melt %>% 
+  ggplot(aes(x=Reference, y=Prediction, fill=value)) + 
+  geom_tile()+
+  theme_minimal()+
+  scale_fill_gradient(low='white',high=studycolors[1])+
+  xlab("True")+
+  ylab("Predicted")+
+  theme(axis.text.x=element_text(angle=45,hjust=1,vjust=1),
+        legend.position = 'bottom')+
+  geom_text(aes(label = value), vjust = -.5)+     
+  geom_text(aes(label = percent(value/sum(value))), vjust = 1)
+
+gmml.me.fi <- fread(file.path(basepath,'results/GMML/mbx_gmme_meXGBClassifier_fi.csv'))  %>% 
+  top_n(20) %>%
+  ggplot(aes(x=reorder(features, percentage), 
+             y=percentage))+
+  geom_histogram(stat = 'identity', 
+                 fill = studycolors[1])+
+  ylab('Feature importance')+
+  scale_y_continuous(labels = scales::percent_format(scale = 1e2,accuracy = .1))+
+  xlab('')+
+  coord_flip()+
+  theme_minimal()
+
+gmml.me.shap <- fread(file.path(basepath,'results/GMML/mbx_gmme_me_XGBClassifier_shapi.csv'))%>%
+  rowwise() %>% 
+  mutate(wt = sum(nonIBD, UC, CD)) %>%
+  ungroup %>% 
+  top_n(n = 20) %>% 
+  select(-wt) %>% 
+  melt %>% 
+  ggplot(aes(x=reorder(mbx, value),
+             y=value, 
+             color=variable, 
+             fill=variable))+
+  geom_bar(stat='identity') +
+  coord_flip()+
+  theme_minimal()+
+  xlab('')+
+  ylab('SHAP values')+
+  scale_fill_manual(name = 'diagnosis', 
+                    values=studycolors)+
+  scale_color_manual(name = 'diagnosis',
+                     values=studycolors)+
+  theme(legend.position = 'right')
+```
+
+## GLL 
+```{r}
+gmml_mod_me <- py_load_object(file.path(basepath,'tmp/GMML/mbx_gmme_me_XGBClassifier.sav'))
+gmml_mod_cl <- py_load_object(file.path(basepath,'tmp/GMML/mbx_gmme_cl_XGBClassifier.sav'))
+
+gll.df <- gmml_mod_cl$gll_history %>% 
+  as.matrix %>% 
+  unlist %>% 
+  as.data.frame() %>% 
+  rename(gll=1) %>% 
+  bind_cols(gmml_mod_cl$r2_history%>% 
+              unlist %>% 
+              as.matrix %>% 
+              as.data.frame() %>% 
+              rename(r2=1)) %>% 
+  mutate(mod='clusters', 
+         iterations = seq(1:20)) %>% 
+  bind_rows(
+    gmml_mod_me$gll_history %>% 
+      as.matrix%>% 
+      unlist %>% 
+      as.data.frame() %>% 
+      rename(gll=1) %>% 
+      bind_cols(gmml_mod_me$r2_history %>% 
+                  as.matrix%>% 
+                  unlist %>% 
+                  as.data.frame() %>% 
+                  rename(r2=1)) %>% 
+      mutate(mod='mixed_effects', 
+             iterations = seq(1:20))
+    ) %>% 
+  pivot_longer(-c(iterations, mod), 
+               names_to = 'diag')
+
+gll.plot <- ggplot(gll.df)+
+  aes(x=iterations, 
+      y=value, 
+      color = mod)+
+  geom_line()+
+  facet_wrap(diag~., scales = 'free_y')+
+  theme_minimal()+
+  scale_color_tableau(name='Generalized \nML model')+
+  ylab('')+
+  theme(legend.position='bottom')
+
+
+```
+
+## FigS1
+```{r, fig.width=15, fig.height=8}
+fig.s1 <- ggarrange(
+  ggarrange(
+    ggarrange(mwu.volcano+
+                theme(legend.position = 'none'), 
+              xgb.plot,
+              ncol = 2,
+              widths = c(2,5), 
+              labels = 'auto'),
+    ggarrange(gll.plot+
+                theme(legend.position = 'none'),
+              ggarrange(
+                 ggarrange(gmml.cm+
+                             theme(legend.position = 'none'), 
+                           gmml.fi, 
+                           gmml.shap+
+                             theme(legend.position = 'none'),
+                           nrow=1, 
+                           widths = c(2,3,4)
+                           ), 
+                 ggarrange(gmml.me.cm+
+                             theme(legend.position = 'none'), 
+                           gmml.me.fi, 
+                           gmml.me.shap+
+                             theme(legend.position = 'none'),
+                           nrow = 1,
+                           widths = c(2,3,4)
+                 ),
+                 nrow=2, 
+               labels = c('d','e')
+               ),
+               ncol = 2,
+               widths = c(2,5), 
+               labels = c('c','')),
+    nrow = 2,
+    heights = c(1,2)
+    ),
+  ggarrange(cowplot::get_legend(gll.plot), 
+            cowplot::get_legend(gmml.cm), 
+            cowplot::get_legend(gmml.me.shap+theme(legend.position = 'bottom')), 
+            nrow = 1),
+  ncol = 1, heights = c(10,1)
+  )%>% show
+
+ggsave(file.path(basepath,'results/manuscript_files/FigS1.pdf'), device = 'pdf', width = 19, height = 10, units = 'in')
+
+```
+
+## Supplementary Table 1
+```{r}
+fread(file.path(basepath,'results/summaries/mwu_summaries.csv')) %>% 
+  full_join(fread(file.path(basepath,'results/summaries/XGB_res_summary.tsv'))) %>% 
+  full_join(fread(file.path(basepath,'results/summaries/GMME_XGB_res_summary.tsv'))) %>% 
+  select(-abundance) %>% 
+  separate(HMDB, c('HMDB','HMP2_metab'), sep='; ') %>% 
+  select(-HMDB) %>% 
+  left_join(fread(file.path(basepath,'tmp/Manual_HMBD_ref.txt')) %>% 
+              select(-SMILES), 
+            by='HMP2_metab') %>%
+  left_join(hmdb_ref)%>% 
+  left_join(master_mbx %>% 
+              distinct(HMDB, diagnosis, ranking) %>% 
+              pivot_wider(names_from = diagnosis, 
+                          values_from = ranking, 
+                          names_prefix = 'scoring_',
+                          values_fn = list(ranking = mean))
+            ) %>% 
+  select(HMDB, everything(), -KEGG) %>% 
+  distinct_all() %>% 
+  mutate(Metabolites = coalesce(Metabolites, HMP2_metab)) %>% 
+  left_join(up.df %>% 
+              upset_data(colnames(up.df)[7:12]) %>%
+              `[[`('with_sizes') %>% 
+              select(HMP2_metab,
+                     Ontology = intersection)) %>% 
+  openxlsx::write.xlsx(file.path(basepath,'results/manuscript_files/Supplementary_Table1.xlsx'))
+
+  
+```
+
+
+# Scoring evaluation
+## Pre-transform
+```{r}
+importances.plot <- fread(file.path(basepath,'results/summaries/mwu_summaries.csv')) %>% 
+  full_join(fread(file.path(basepath,'results/summaries/XGB_res_summary.tsv'))) %>% 
+  full_join(fread(file.path(basepath,'results/summaries/GMME_XGB_res_summary.tsv'))) %>% 
+  group_by(HMDB) %>%
+  mutate_at(vars(contains('pvalue')), 
+            list(~case_when(is.numeric(.) & .==0 ~ 0.1,
+                            is.na(.) ~ 0.1,
+                            is.numeric(.) ~ -log10(.), 
+                            TRUE~.)
+                 ))%>% 
+  ungroup %>% 
+  mutate_at(vars(contains('fi'), contains('shap'), 
+                 'gain', contains('pvalue')), 
+            list(~ case_when(is.numeric(.) ~ rescale(., to=c(0,1)),
+                            TRUE~.))) %>%
+  pivot_longer(cols=c(contains('pvalue'), contains('fi'),
+                      contains('shap'), 'gain')) %>% 
+  mutate(diagnosis = case_when(grepl('CD', name) ~'CD', 
+                               grepl('UC', name) ~'UC',
+                               grepl('nonIBD', name)~'nonIBD', 
+                               TRUE~NA_character_)) %>% 
+  mutate(name=str_remove_all(name, '_CD|_UC|_nonIBD')) %>% 
+  ggplot(aes(x=name, y=value, color=diagnosis))+
+  geom_jitter(aes(group=diagnosis), 
+              position=position_jitterdodge(), 
+              alpha=0.7) +
+  theme_minimal() + 
+  coord_flip() + 
+  scale_color_manual(values = studycolors, 
+                     na.value=studycolors[1])+
+  scale_x_discrete(labels = c(~ atop(paste("MannWithney U"), 
+                                     paste('log(', italic("q"), 
+                                           '-value)')),
+                              'Feature Importance \n(XGB)',
+                              'Feature gain \n(XGB)',
+                              'SHAP values \n(XGB)',
+                              'Feature Importance \n(GMML with clusters)',
+                              'SHAP values \n(GMML with \nrandom effects)'),
+                   limits = c('pvalue_mann_whitney',
+                              'xgb_fi','gain','shap_xgb',
+                              'gmme_fi','shap_gmme'))+
+  labs(x='', y='Value') 
+
+```
+
+## Consensus
+```{r}
+scoring.plot <- master_mbx %>% 
+  group_by(HMDB) %>%
+  distinct(HMDB, ranking, diagnosis) %>% 
+  ggplot(aes(x=diagnosis, y=ranking, color=diagnosis))+
+  geom_violin()+
+  geom_jitter(aes(group=diagnosis), position=position_jitterdodge(), alpha=0.7) +
+  theme_minimal() + 
+  scale_color_manual(values = studycolors)+
+  labs(y='Consensus Scoring', x='')+
+  stat_compare_means(comparisons = list(c('CD','UC')), 
+                     label = 'p.signif', 
+                     p.adjust.method='BH')
+
+```
+
+#Scatterplots
+```{r}
+consensus.p_mwu <- 
+  master_mbx %>% 
+  group_by(HMDB) %>%
+  distinct(Metabolites, ranking, MWU_qval, diagnosis) %>% 
+  ggplot(aes(x=MWU_qval, y=ranking, color=diagnosis))+
+  geom_jitter(aes(group=diagnosis), position=position_jitterdodge(), alpha=0.7) +
+  facet_grid(.~diagnosis) +
+  theme_minimal() + 
+  theme(panel.border=element_blank(), 
+        legend.background=element_blank(), 
+        legend.position = 'none')+
+  geom_smooth()+
+  ylab('Consensus score')+
+  xlab(~ atop(paste("MannWithney U"), 
+              paste('log(', italic("q"),
+                    '-value)')))+
+  scale_color_manual(values = studycolors)
+  
+consensus.xgb_fi <- 
+  master_mbx %>% 
+  full_join(fread(file.path(basepath,'results/summaries/XGB_res_summary.tsv')) %>% 
+              separate(HMDB, c('HMDB','HMP2_metab'), sep='; ')) %>% 
+  group_by(HMDB) %>%
+  distinct(Metabolites, ranking, xgb_fi, diagnosis) %>% 
+  drop_na() %>% 
+  ggplot(aes(x=xgb_fi, y=ranking, color=diagnosis))+
+  geom_jitter(alpha=0.7) +
+  facet_grid(~diagnosis)+
+  theme_minimal() + 
+  theme(panel.border=element_blank(), 
+        legend.background=element_blank(), 
+        legend.position = 'none')+
+  geom_smooth()+
+  ylab('Consensus score')+
+  xlab('Feature Importance \n(XGB)')+
+  scale_color_manual(values = studycolors)
+
+consensus.xgb_gain <- master_mbx %>% 
+  full_join(fread(file.path(basepath,'results/summaries/XGB_res_summary.tsv')) %>% 
+              separate(HMDB, c('HMDB','HMP2_metab'), sep='; ')) %>% 
+  group_by(HMDB) %>%
+  distinct(Metabolites, ranking, gain, diagnosis) %>% 
+  drop_na() %>% 
+  ggplot(aes(x=gain, y=ranking, color=diagnosis))+
+  geom_jitter(alpha=0.7) +
+  facet_grid(~diagnosis)+
+  theme_minimal() + 
+  theme(panel.border=element_blank(), 
+        legend.background=element_blank(), 
+        legend.position = 'none')+
+  geom_smooth()+
+  ylab('Consensus score')+
+  xlab('Feature gain \n(XGB)')+
+  scale_color_manual(values = studycolors)
+
+consensus.shap_xgb <-master_mbx %>% 
+  group_by(HMDB) %>%
+  distinct(Metabolites, ranking, XGB_shap, diagnosis) %>% 
+  drop_na() %>% 
+  ggplot(aes(x=XGB_shap, y=ranking, color=diagnosis))+
+  geom_jitter(alpha=0.7) +
+  facet_grid(~diagnosis)+
+  theme_minimal() + 
+  theme(panel.border=element_blank(), 
+        legend.background=element_blank(), 
+        legend.position = 'none')+
+  geom_smooth()+
+  ylab('Consensus score')+
+  xlab('SHAP values \n(XGB)')+
+  scale_color_manual(values = studycolors)
+  
+consensus.gmme_fi <- 
+  master_mbx %>% 
+  full_join(fread(file.path(basepath,'results/summaries/GMME_XGB_res_summary.tsv')) %>% 
+              separate(HMDB, c('HMDB','HMP2_metab'), sep='; ')) %>% 
+  group_by(HMDB) %>%
+  distinct(Metabolites, ranking, gmme_fi, diagnosis) %>% 
+  drop_na() %>% 
+  ggplot(aes(x=gmme_fi, y=ranking, color=diagnosis))+
+  geom_jitter(alpha=0.7) +
+  facet_grid(~diagnosis)+
+  theme_minimal() + 
+  theme(panel.border=element_blank(), 
+        legend.background=element_blank(), 
+        legend.position = 'none')+
+  geom_smooth()+
+  ylab('Consensus score')+
+  xlab('Feature Importance \n(GMML with clusters)')+
+  scale_color_manual(values = studycolors)
+
+consensus.shap_gmme <-master_mbx %>% 
+  group_by(HMDB) %>%
+  distinct(Metabolites, ranking, GMME_shap, diagnosis) %>% 
+  drop_na() %>% 
+  ggplot(aes(x=GMME_shap, y=ranking, color=diagnosis))+
+  geom_jitter(alpha=0.7) +
+  facet_grid(~diagnosis)+
+  theme_minimal() + 
+  theme(panel.border=element_blank(), 
+        legend.background=element_blank(), 
+        legend.position = 'none')+
+  ylab('Consensus score')+
+  xlab('SHAP values \n(GMML with \nrandom effects)')+
+  scale_color_manual(values = studycolors)
+
+```
+
+## Qqplots
+```{r}
+consensus.qq <- master_mbx %>% 
+  ggqqplot(x='ranking',
+           color = 'diagnosis',
+           alpha=.7)+
+  facet_grid(.~diagnosis)+
+  theme_minimal() + 
+  scale_color_manual(values = studycolors)+
+  scale_fill_manual(values = studycolors)+
+  theme(legend.position = 'none')
+
+```
+
+## Fig S2
+```{r}
+fig.s2 <- ggarrange(
+  ggarrange(importances.plot, scoring.plot, 
+            nrow=1, labels='auto', 
+            common.legend = T, legend = 'bottom'),
+  ggarrange(
+    consensus.p_mwu, consensus.xgb_fi, consensus.shap_xgb,
+    consensus.xgb_gain, consensus.gmme_fi, consensus.shap_gmme,
+    nrow = 2,
+    ncol = 3,
+    labels = c('c','d','e','f','g','h')
+  ), 
+  consensus.qq, 
+  nrow = 3,
+  heights = c(1,2,1),
+  labels = c('','','i')
+) %>% show
+
+ggsave(file.path(basepath,'results/manuscript_files/FigS2.pdf'), device = 'pdf', width = 12, height = 14, units = 'in')
+
+```
+
+# Metabolites origin
+
+## Upset
+```{r}
+accessory.df <-  up.df %>% 
+  filter(in_this_study) %>% 
+  upset_data(colnames(up.df)[7:12]) %>% 
+  `[[`('with_sizes')
+
+
+met.upset.plot <- upset(data = up.df %>% 
+        filter(in_this_study),
+      intersect = colnames(up.df)[7:12], 
+      width_ratio = 0.2,
+      keep_empty_groups=F,
+      name = 'Metabolite sources intersections',
+      themes = upset_modify_themes(
+        list(
+          'overall_sizes'=theme(axis.text.x=element_text(angle=90),
+                                legend.position = 'none')
+        )
+      ),
+      base_annotations=list(
+        'Intersection size'= upset_annotate(
+          y = '..count..',
+          geom = list(
+            geom_bar(data=accessory.df,
+                     aes(fill=diagnosis),
+                     position=position_dodge()),
+            scale_fill_manual(values=studycolors),
+            geom_text(data=accessory.df,
+                      aes(label=..count.., 
+                          group = diagnosis,
+                          y = ..count.. + 12),
+                      stat='count',
+                      position = position_dodge(1))
+          )
+        )
+      ),
+      set_sizes=list(
+        geom_point(data =up.df %>%
+                     select(1, 7:12) %>% 
+                     distinct_all() %>% 
+                     upset_data(colnames(.)[2:7]) %>% 
+                     `[` (c('intersected','matrix_frame')) %>% 
+                     purrr::reduce(left_join) %>% 
+                     filter(value) %>% 
+                     group_by(group) %>% 
+                     summarize(n_mets = n_distinct(HMP2_metab)) %>% 
+                     ungroup, 
+                   aes(y=n_mets)),
+        ylab('Metabolites by source'),
+        scale_y_reverse()
+      ),
+      annotations = list(
+        'Consensus scoring'= list(
+          aes = aes(x=intersection, y = ranking, color=diagnosis),
+          geom = list(geom_jitter(),
+                      geom_boxplot(alpha=0.7),
+                      scale_color_manual(values=studycolors, guide=FALSE),
+                      # stat_compare_means(label = 'p.adj',
+                      #                    hide.ns = T)
+                      stat_pvalue_manual(data = up.df %>% 
+                                           upset_data(colnames(up.df)[7:12]) %>% 
+                                           `[[`('with_sizes')%>% 
+                                           group_by(intersection) %>%
+                                           filter(n_distinct(ranking)>2) %>% 
+                                           wilcox_test(ranking~diagnosis,
+                                                       detailed = T)%>%
+                                           adjust_pvalue(method = 'fdr') %>% 
+                                           add_significance('p.adj'), 
+                                         label = "p.adj", 
+                                         y.position = 1.2)
+          )
+        )
+      )
+) 
+
+
+```
+
+## Fig S3
+```{r}
+met.upset.plot + 
+  patchwork::plot_annotation(tag_levels = 'a')
+
+ggsave(file.path(basepath,'results/manuscript_files/FigS3.pdf'), device = 'pdf', width = 10, height = 8, units = 'in')
+```
+
+# Host transcriptomics
+## Upsets
+```{r}
+up.htx.df <- htx_results %>% 
+  group_by(diagnosis) %>% 
+  mutate(in_this_study = case_when(padj<0.05~TRUE, TRUE~FALSE)) %>% 
+  ungroup %>% 
+  full_join(readxl::read_xlsx(file.path(basepath,'tmp/Supplementary Tables 31-33.xlsx'), sheet = 1) %>% 
+               mutate(in_HMP2 = case_when(`FDR Pvalue`<0.05~TRUE,TRUE~FALSE)) %>% 
+               select(hgncid=Gene, in_HMP2))  %>% 
+  filter_at(vars(in_this_study, in_HMP2), any_vars(.!=FALSE)) %>% 
+  distinct(hgncid, diagnosis, log2FoldChange, padj, in_this_study, in_HMP2)
+
+htx.upset.plot <- upset(data = up.htx.df ,
+                        intersect = c('in_this_study','in_HMP2'), 
+                        width_ratio = 0.2,
+                        keep_empty_groups=F,
+                        name = 'Differentially expressed genes intersections',
+                        themes = upset_modify_themes(
+                          list(
+                            'overall_sizes'=theme(axis.text.x=element_text(angle=90),
+                                                  legend.position = 'none')
+                          )
+                        ),
+      base_annotations=list(
+        'Intersection size'= upset_annotate(
+          y = '..count..',
+          geom = list(
+            geom_bar(data=up.htx.df%>% 
+                       upset_data(c('in_this_study','in_HMP2')) %>% 
+                       `[[`('with_sizes')%>% 
+                       drop_na(diagnosis) %>% 
+                       distinct(hgncid, diagnosis, intersection),
+                     aes(fill=diagnosis),
+                     position=position_dodge()),
+            scale_fill_manual(values=studycolors, guide=FALSE),
+            geom_text(aes(label=..count.., 
+                          y=..count..+40, 
+                          group=diagnosis), 
+                      stat='count', 
+                      position = position_dodge(1))
+          )
+        )
+      ),
+      annotations = list(
+        '-Log(q-value)\ndistribution' = list(
+          aes = aes(x=intersection, y = -log(padj), color=diagnosis, size=log2FoldChange),
+          geom = list(geom_point(position=position_jitterdodge(),
+                                 alpha=0.7),
+                      geom_boxplot(alpha=0.8),
+                      scale_color_manual(values=studycolors, guide=FALSE),
+                      stat_compare_means(label = 'p.signif',
+                                         hide.ns = T),
+                      guides(size=FALSE)
+          )
+        )
+      ),
+      set_sizes=list(
+        geom_bar(data =up.htx.df %>%
+                   select(1, c('in_this_study','in_HMP2')) %>% 
+                   distinct_all() %>% 
+                   upset_data(c('in_this_study','in_HMP2')) %>% 
+                   `[` (c('intersected','matrix_frame')) %>% 
+                   purrr::reduce(left_join) %>% 
+                   filter(value) %>% 
+                   group_by(group) %>% 
+                   summarize(n_targs = n_distinct(hgncid)) %>% 
+                   ungroup , 
+                 aes(y=n_targs), 
+                 stat = 'identity', 
+                 width = .4),
+        ylab('DEGs selected \nper study'),
+        scale_y_reverse()
+      )
+) 
+
+
+```
+
+## Pathways
+
+```{r}
+pwy.plot <- htx_results %>% 
+  distinct(Pathway, highest_p, Fold_Enrichment, diagnosis) %>% 
+  arrange(desc(highest_p)) %>% 
+  group_by(diagnosis) %>% 
+  top_n(-20, highest_p) %>% 
+  ggplot()+
+  aes(x=reorder(Pathway, -log(highest_p)), y=-log(highest_p))+
+  # facet_grid(~diagnosis, scales='free')+
+  geom_point(aes(size=log(Fold_Enrichment), color=diagnosis), alpha=.75)+
+  coord_flip()+ 
+  theme_minimal() + 
+  theme(panel.border=element_blank(), 
+        legend.background=element_blank())+
+  guides(size=guide_legend(title = bquote(~Log[2]~ 'FC')))+
+  scale_color_manual(values = studycolors)+
+  ylab(bquote(~-Log[10]~adjusted~italic(p)~'-value'))+
+  xlab('')
+
+```
+
+## FigS4
+```{r}
+(htx.upset.plot|pwy.plot) + 
+  patchwork::plot_layout(widths=c(5,5))+
+  patchwork::plot_annotation(tag_levels = 'a')
+
+ggsave(file.path(basepath,'results/manuscript_files/FigS4.pdf'), device = 'pdf', width = 15, height = 9, units = 'in')
+
+```
+
+# Fig S5
+```{r}
+# Note: Figure 4 and S5 are made manually via Cytoscape 3.8.0
+
+# Data is exported via 
+
+# library(RCy3)
+# cytoscapePing()
+# fg %>% 
+#   as.igraph %>% 
+#   createNetworkFromIgraph
+
+```
+
+## Fig S6
+```{r, fig.width=15, fig.height=9}
+bioMAP_plot <- readxl::read_xlsx(file.path(basepath, 'elaborated_data/Supplementary_Table5.xlsx'),sheet = 1) %>% 
+  group_by(metabolite, assay_name_required) %>%
+  arrange(concentration_molar) %>% 
+  mutate(conc_levels = log1p(1000*as.numeric(concentration_molar))) %>% 
+  ungroup %>% 
+  arrange(metabolite, conc_levels, bio_marker_name_s_required) %>% 
+  mutate(metabolite = str_replace(metabolite, 'Butyric acid', 'Butyrate'),
+         metabolite=factor(metabolite, 
+                           levels=c('Butyrate', 'Niacin', 
+                                    'alpha-CEHC', 'Oleanolic acid'), 
+                           ordered = T)) %>% 
+  ggplot()+
+  aes(y=log_ratio_required, x=bio_marker_name_s_required)+
+  facet_grid(metabolite~system_name_required, scales = 'free', space = 'free_x')+
+  theme_minimal()+
+  geom_ribbon(aes(ymin=-significance_prediction_envelope_at_95_percent, ymax=significance_prediction_envelope_at_95_percent), group=1, alpha=0.2) +
+  geom_line(aes(color=conc_levels, group=concentration_molar), alpha=.8) +
+  scale_color_gradient2_tableau(name='Metabolite\nconcentration\n(log mM)')+
+  theme(axis.text.x = element_text(angle=90, size = 8, vjust = .8), 
+        legend.text = element_text(angle=45, size = 8, hjust = 1), 
+        legend.position = 'bottom',
+        panel.spacing = unit(.7 , "lines"))+
+  ylab('LogFC vs control')+
+  xlab('Biomarkers')
+
+bioMAP_plot
+ggsave(file.path(basepath,'results/manuscript_files/FigS6.pdf'), device = 'pdf', width = 15, height = 10, units = 'in')
+```
+
+
+
+# Supplementary Table 2
+
+```{r Sup2, echo=F}
+Sup2 <- target_prioritization %>%  
+  filter(ranking > quantile(ranking, .75))  %>% 
+  filter(pxc50 > 5.5,
+         ifelse(similarity_type == 'Tanimoto', similarity > 0.85, similarity >0.95)) %>% 
+  group_by(hgncid) %>%
+    mutate(
+      mHits = n_distinct(HMDB)
+      ) %>%
+    mutate(
+      Metab_hits = paste0(
+        unique(Metabolites),
+        collapse = "; ")
+      ) %>%
+    ungroup %>%
+    group_by(HMDB) %>%
+    mutate(
+      gHits = n_distinct(hgncid)
+      ) %>%
+    mutate(
+      gene_hits = paste0(
+        unique(hgncid),
+        collapse = "; ")
+      ) %>%
+    ungroup %>% 
+    filter(gHits < 16) %>%
+  arrange(desc(ranking)) %>%
+  distinct_all %>% 
+  group_by(Metabolites, diagnosis) %>% 
+  summarize(`∆ab` = mean(MWU_delta, na.rm=T),
+            ranking = mean(ranking, na.rm=T),
+            analogs = paste0(unique(analog), collapse='; '),
+            Targets=paste0(unique(hgncid), collapse='; ')
+            )
+
+HMP2_important_metabs <- 
+  readxl::read_xlsx('elaborated_data/Supplementary Tables 1-28.xlsx', sheet=16) %>%
+  filter(`Minimum Q Value` <= 0.05) %>% 
+  left_join(metab_results %>% 
+              select(Metabolites, HMP2_metab), 
+            by = c('Feature'='HMP2_metab')) %>% 
+  select(Metabolites, Feature) %>% 
+  distinct(Metabolites, .keep_all = T)
+
+tested_metabs <- 
+  metab_results %>% 
+  filter(HMDB %in% c('HMDB0001488', # Niacin
+                     'HMDB0000684', # L-Kynurenine
+                     'HMDB0062781', # 2-oxoglutarate
+                     'HMDB0001518', # a-CEHC
+                     'HMDB0002364') # oleanolic
+         ) %>% 
+  distinct(Metabolites) %>%
+  pull
+
+
+Sup2 %>% 
+  ungroup %>% 
+  mutate(Metabolites=
+           case_when(Metabolites %in%  tested_metabs & 
+                       Metabolites %in% HMP2_important_metabs$Metabolites~ paste0(Metabolites,footnote_marker_number('† ‡', "html")),
+                     Metabolites %in% HMP2_important_metabs$Metabolites ~ paste0(Metabolites, footnote_marker_number('†', "html")),
+                     Metabolites %in%  tested_metabs ~ paste0(Metabolites, footnote_marker_number('‡', "html")),
+                     TRUE~Metabolites)
+         ) %>% 
+  kable(format = 'latex', escape = F,  digits = 4) %>%
+  kable_styling(bootstrap_options = 'condensed') %>%
+  column_spec(1, bold = T) %>%
+  collapse_rows(columns = c(1,5,6), valign = "middle")
+
+Sup2 %>% 
+  ungroup %>% 
+  mutate(Metabolites=
+           case_when(Metabolites %in%  tested_metabs & 
+                       Metabolites %in% HMP2_important_metabs$Metabolites~ paste0(Metabolites,footnote_marker_number('† ‡')),
+                     Metabolites %in% HMP2_important_metabs$Metabolites ~ paste0(Metabolites, footnote_marker_number('†')),
+                     Metabolites %in%  tested_metabs ~ paste0(Metabolites, footnote_marker_number('‡', "html")),
+                     TRUE~Metabolites)
+         ) %>% 
+  cSplit('Targets', 'long', sep = '; ') %>% 
+  openxlsx::write.xlsx(file.path(basepath,'results/manuscript_files/Supplementary_Table2.xlsx'))
+
+
+```
+
+
+
+# Supplementary Table 3
+
+```{r Sup3}
+HMP2_important_htx <- 
+  readxl::read_xlsx(file.path(basepath,'elaborated_data/Supplementary Tables 31-33.xlsx'), sheet = 1) %>% 
+  group_by(Comparison) %>% 
+  filter(`FDR Pvalue`<0.05) %>% 
+  ungroup %>% 
+  distinct(Gene) %>% 
+  pull 
+
+Sup3 <- target_prioritization %>%  
+  filter(ranking > quantile(ranking, .75) | !is.na(log2FoldChange),
+         pxc50 > 5.5,
+         ifelse(similarity_type == 'Tanimoto', similarity > 0.85, similarity >0.95)) %>% 
+  group_by(hgncid) %>%
+    mutate(
+      mHits = n_distinct(HMDB)
+      ) %>%
+    mutate(
+      Metab_hits = paste0(
+        unique(Metabolites),
+        collapse = "; ")
+      ) %>%
+    ungroup %>%
+    group_by(Metabolites) %>%
+    mutate(
+      gHits = n_distinct(hgncid)
+      ) %>%
+    mutate(
+      gene_hits = paste0(
+        unique(hgncid),
+        collapse = "; ")
+      ) %>%
+    ungroup %>% 
+    filter(gHits <= 20, 
+           mHits <= 20) %>%
+  arrange(desc(ranking)) %>%
+  distinct_all %>% 
+  select(Targets=hgncid, Metabolites, MWU_delta, analog,
+         pxc50, similarity, similarity_type, type,
+         log2FoldChange, padj, Pathway, Fold_Enrichment, highest_p, 
+         diagnosis) %>% 
+  group_by(Metabolites, Targets, type) %>% 
+  filter(pxc50 == max(pxc50)) %>% 
+  group_by(Targets, Metabolites, diagnosis) %>% 
+  drop_na(log2FoldChange) %>% 
+  mutate(candidates = 
+           case_when(MWU_delta<0 & type=='Negative'~ 'Negative modulator (scarce)', 
+                     MWU_delta<0 & type=='Positive'~ 'Positive modulator (scarce)', 
+                     MWU_delta>0 & type=='Positive'~ 'Positive modulator (abundant)', 
+                     MWU_delta>0 & type=='Negative'~ 'Negative modulator (abundant)', 
+                     TRUE~'Unknown')) %>% 
+  distinct(Metabolites, pxc50, candidates, Pathway, .keep_all = T) %>% 
+  group_by(Targets, diagnosis) %>% 
+  summarize(Metabolites = paste0(Metabolites, 
+                                 #', Action: ', type 
+                                 ', ', candidates,
+                                 ' (pxC50=',pxc50,')', collapse='; '),
+            `∆expr` = mean(log2FoldChange, na.rm=T), 
+            qval = mean(padj, na.rm=T), 
+            `Enriched Pathways` = paste0(unique(na.omit(Pathway)), collapse='; '), 
+            Metabolites = paste0(unique(Metabolites), collapse= '; ')) %>% 
+  distinct_all
+  
+Sup3 %>% 
+  ungroup %>% 
+  distinct_all %>% 
+  type_convert() %>% 
+  mutate(Targets = case_when(Targets %in% HMP2_important_htx ~ paste0(Targets,footnote_marker_number('†', "html")),
+                            TRUE~ Targets)) %>% 
+  kable(format = 'html', escape=F, digits = 4) %>%
+  kable_styling(bootstrap_options = 'condensed') %>%
+  column_spec(1, bold = T) %>%
+  collapse_rows(columns = c(1,3:6), valign = "middle")
+
+Sup3 %>% 
+  ungroup %>% 
+  type_convert() %>% 
+  mutate(Targets = case_when(Targets %in% HMP2_important_htx ~ paste0(Targets,footnote_marker_number('†')),
+                            TRUE~ Targets))%>% 
+  cSplit('Metabolites', 'long', sep = '; ') %>% 
+  cSplit('Enriched Pathways', 'long', sep = '; ') %>% 
+  distinct_all %>% 
+  openxlsx::write.xlsx(file.path(basepath,'results/manuscript_files/Supplementary_Table3.xlsx'))
+
+```
+# Supplementary Table 4
+
+```{r Sup4}
+Sup4 <-   omim.table%>% 
+  distinct(hgncid) %>% 
+  collect %>% 
+  full_join(IBD_Gwases) %>% 
+  full_join(IBD_pathways) %>% 
+  inner_join(target_prioritization) %>%
+  filter(pxc50 > 5.5, 
+         similarity>0.8) %>%  
+  group_by(hgncid, Metabolites, diagnosis) %>% 
+  mutate(candidates = 
+           case_when(MWU_delta<0 & type=='Negative'~ 'Negative modulator (scarce)', 
+                     MWU_delta<0 & type=='Positive'~ 'Positive modulator (scarce)', 
+                     MWU_delta>0 & type=='Positive'~ 'Positive modulator (abundant)', 
+                     MWU_delta>0 & type=='Negative'~ 'Negative modulator (abundant)', 
+                     TRUE~'Unknown'))  %>% 
+  # filter(candidates != 'Unknown') %>%
+  group_by(hgncid) %>% 
+  mutate(
+    mHits = n_distinct(HMDB)
+  ) %>%
+  ungroup %>% 
+  group_by(HMDB) %>% 
+  mutate(
+    gHits = n_distinct(hgncid)
+  ) %>%
+  group_by(hgncid, diagnosis) %>% 
+  distinct(SNPS, Metabolites, MWU_delta, ranking, .keep_all = T) %>% 
+  mutate(Metabolites = case_when(Metabolites %in% Sup2$Metabolites ~ paste0(Metabolites,footnote_marker_number('◊', "html")),
+                            TRUE~ Metabolites),
+         GWAS = paste0(unique(`DISEASE/TRAIT`), collapse = '; '),
+         variant=paste0(unique(paste0(SNPS, ' (',CONTEXT,')')), collapse = '; '),
+         `∆expr` = mean(log2FoldChange, na.rm=T), 
+         qval = mean(padj, na.rm=T), 
+         `Enriched Pathways` = paste0(unique(Pathway), collapse='; '), 
+         Metabolites = paste0(unique(paste0(Metabolites, 
+                              #', ∆ab=', round(MWU_delta, 3), ', ranking=', round(ranking, 3),
+                              ', ', candidates, 
+                              ', (pxc50 = ', pxc50, ')')), 
+                              collapse='; ')
+  ) 
+
+
+Sup4 %>% 
+  ungroup %>% 
+  readr::type_convert() %>% 
+  arrange(hgncid, Metabolites) %>% 
+  mutate(variant = str_replace_all(variant,'_', ' ')) %>%
+  select(hgncid, `Genetic association` = `DISEASE/TRAIT`,
+         Variant = SNPS, 
+         `GWAS p-value`=`P-VALUE`, PUBMEDID, 
+         `Manual pathway curation`=action, 
+         `Additional pathway evidence`=action,
+         `∆expr`, qval, `Enriched Pathways`, 
+         diagnosis, Metabolites) %>% 
+  mutate(hgncid = case_when(hgncid %in% Sup3$Targets ~ paste0(hgncid,footnote_marker_number('§')),
+                            TRUE~ hgncid)) %>%
+  dplyr::rename(Target=hgncid) %>% 
+  cSplit('Metabolites', 'long', sep = '; ') %>% 
+  cSplit('Enriched Pathways', 'long', sep = '; ') %>% 
+  distinct_all()  %>% 
+  cSplit('Metabolites','; ','long') %>% 
+  separate(Metabolites, c('Metabolites','Tentative classification','pxC50'), sep = ', ') %>% 
+  mutate(pxC50 = str_replace_all(pxC50, '\\(pxc50 = ', ''),
+         pxC50 = str_replace_all(pxC50, '\\)', ''),
+         `∆expr` = case_when(`∆expr`>0~'Upregulated',`∆expr`<0~'Downregulated',TRUE~NA_character_)) %>% 
+  openxlsx::write.xlsx(file.path(basepath,'results/manuscript_files/Supplementary_Table4.xlsx'))
+```
+
+# Table 2
+# Supplementary Table 5
+
+```{r}
+Sup4 %>% 
+  ungroup %>% 
+  readr::type_convert() %>% 
+  filter(!grepl('Unknown',Metabolites)) %>% 
+  arrange(hgncid, Metabolites) %>% 
+  mutate(variant = str_replace_all(variant,'_', ' ')) %>%
+  select(hgncid, variant, GWAS, `Additional pathway evidence`=action,
+         `∆expr`, `Enriched Pathways`, diagnosis, Metabolites) %>% 
+  # cSplit('Metabolites','; ','long') %>% 
+  # separate(Metabolites, c('Metabolites','Tentative classification','pxC50'), sep = ',') %>% 
+  mutate(Metabolites = str_replace_all(Metabolites, ', \\(([^)]+)\\)', ''),
+         hgncid = case_when(hgncid %in% Sup3$Targets ~ paste0(hgncid,footnote_marker_number('§', "html")),
+                            TRUE~ hgncid),
+         `∆expr` = case_when(`∆expr`>0~'Upregulated',`∆expr`<0~'Downregulated',TRUE~NA_character_)) %>%
+  dplyr::rename(Target=hgncid) %>%  
+  distinct_all() %>% 
+  kable(format = 'html', escape=F, digits = 3) %>%
+  kable_styling(bootstrap_options = 'condensed') %>%
+  column_spec(1, bold = T) %>%
+  collapse_rows(columns = c(1:4,8), valign = "middle", row_group_label_position = 'stack')%>%
+  add_header_above(c(" " = 1, "Genetic association" = 3, "Transcriptomic signature" = 3, "Candidate modulators"=1), align = 'left')
+
+```
+
+# Supplementary Table 6
+```{r}
+target_prioritization %>% 
+  left_join(hmdb_ref %>% 
+              group_by(Metabolites) %>% 
+              summarize(Ontology=paste0(unique(na.omit(origin)), collapse='; ')) 
+            )%>% 
+  left_join(omim.table%>% 
+    distinct(hgncid) %>% 
+    full_join(IBD_Gwases) %>% 
+    full_join(IBD_pathways)) %>% 
+  filter(pxc50 > 5.5,
+         ifelse(similarity_type == 'Tanimoto', similarity > 0.85, similarity >0.95)) %>% 
+  group_by(hgncid) %>%
+    mutate(
+      mHits = n_distinct(Metabolites)
+      ) %>%
+    mutate(
+      Metab_hits = paste0(
+        unique(Metabolites),
+        collapse = "; ")
+      ) %>%
+    ungroup %>%
+    group_by(Metabolites) %>%
+    mutate(
+      gHits = n_distinct(hgncid)
+      ) %>%
+    mutate(
+      gene_hits = paste0(
+        unique(hgncid),
+        collapse = "; ")
+      ) %>%
+    ungroup %>%  
+  select(Metabolites, HMDB, diagnosis, 
+         `Metabolite differential concentration`=MWU_delta, 
+         `Metabolite scoring` = ranking,
+         analog, `Similarity index` = similarity_type, similarity, 
+         Modulation=type, pxc50, 
+         Target=hgncid, 
+         `Target differential expression` = log2FoldChange,
+         `Adjusted p-value` = padj, 
+         `In enriched pathway` = Pathway, 
+         `Enrichment significance` = lowest_p, 
+         `Metabolite pleiotropy` = gHits, 
+         `Target pleiotropy` = mHits, 
+         `Genetic association` = `DISEASE/TRAIT`,
+         Variant = SNPS, 
+         `GWAS p-value`=`P-VALUE`, PUBMEDID, 
+         `Manual pathway curation`=action) %>% 
+  distinct_all  %>% 
+  openxlsx::write.xlsx(file.path(basepath,'results/manuscript_files/Supplementary_Table6.xlsx'))
+  
+```
+
+
+```{r}
+rm(basepath)
+save.image(file.path('tmp/multiomics.RData'))
+
+rm(list = ls())
+sessionInfo()
+```
