@@ -52,9 +52,7 @@ bash scripts/get_data.sh
 ```
 Rscript -e "rmarkdown::render('scripts/Metabolomics.Rmd',params=list(basepath = 'path/to/working/dir'))"
 Rscript -e "rmarkdown::render('scripts/Host_transcriptomics.Rmd',params=list(basepath = 'path/to/working/dir'))"
-Rscript -e "rmarkdown::render('scripts/Figures.Rmd',params=list(basepath = 'path/to/working/dir'))"
-Rscript -e "rmarkdown::render('scripts/Suppl_mat.Rmd',params=list(basepath = 'path/to/working/dir'))"
-
+Rscript -e "rmarkdown::render('scripts/Multiomics_and_figures.Rmd',params=list(basepath = 'path/to/working/dir'))"
 ```
 
 
