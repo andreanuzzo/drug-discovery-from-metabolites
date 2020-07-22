@@ -949,9 +949,21 @@ master_mbx%>%
   write_tsv(file.path(basepath,'results/summaries/master_mbx.tsv'))
 ```
 
+# Save outputs
 ```{r}
-sessionInfo()
-```
-```{r}
+saveRDS(metabolomics_raw, file.path(basepath, 'tmp/metabolomics_raw.Rds'))
+saveRDS(sample_data, file.path(basepath, 'tmp/sample_data.Rds'))
+saveRDS(cm, file.path(basepath, 'tmp/cm.Rds'))
+saveRDS(cm2, file.path(basepath, 'tmp/cm2.Rds'))
+saveRDS(cm3, file.path(basepath, 'tmp/cm3.Rds'))
+
+
+
+
+
+rm(basepath)
 save.image(file.path(basepath,'tmp/metabolomics.RData'))
+
+sessionInfo()
+
 ```

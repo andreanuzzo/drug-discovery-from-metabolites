@@ -53,7 +53,7 @@ cts <- fread(file.path(project_folder,'raw_data/host_tx_counts.tsv.gz')) %>%
           dplyr::select(which(colSums(.)!=0)) %>%
           data.matrix
 
-metadata <- fread(file.path(project_folder,'elaborated_data/HMP2_sample_data')) %>%
+htx.sample_data <- fread(file.path(project_folder,'elaborated_data/HMP2_sample_data')) %>%
               clean_names() %>%
               filter(data_type == 'host_transcriptomics') %>%
               select(external_id, participant_id, diagnosis, site_name, consent_age, biopsy_location)  %>%
@@ -61,14 +61,14 @@ metadata <- fread(file.path(project_folder,'elaborated_data/HMP2_sample_data')) 
               filter(external_id %in% colnames(cts)) %>% 
               column_to_rownames('external_id') 
 
-col_order = intersect(colnames(cts), rownames(metadata))
+col_order = intersect(colnames(cts), rownames(htx.sample_data))
 
-metadata <- metadata[col_order, ]
+htx.sample_data <- htx.sample_data[col_order, ]
 cts <- cts[, col_order]
 
-all(rownames(metadata) == colnames(cts))
+all(rownames(htx.sample_data) == colnames(cts))
 
-dds <- DESeqDataSetFromMatrix(countData = cts, colData = metadata, 
+dds <- DESeqDataSetFromMatrix(countData = cts, colData = htx.sample_data, 
                               design = ~ diagnosis)
 
 
@@ -87,7 +87,7 @@ dds <- dds[keep,]
 ### Summary plots 
 se <- as(dds, "SummarizedExperiment")
 
-ese <- ExpressionSet(assay(se),AnnotatedDataFrame(metadata))
+ese <- ExpressionSet(assay(se),AnnotatedDataFrame(htx.sample_data))
 
 print(esetSpectralMap(eset = ese))
 set.seed(42) 
@@ -116,9 +116,9 @@ tsne_out <- Rtsne(t(assay(dds)),
 
 data.frame(x = tsne_out$Y[,1], 
             y = tsne_out$Y[,2], 
-            col = metadata[colnames(cts),]$biopsy_location, 
-            size = metadata[colnames(cts),]$consent_age,
-            shape = metadata[colnames(cts),]$diagnosis) %>% 
+            col = htx.sample_data[colnames(cts),]$biopsy_location, 
+            size = htx.sample_data[colnames(cts),]$consent_age,
+            shape = htx.sample_data[colnames(cts),]$diagnosis) %>% 
   ggplot() + 
   geom_point(aes(x=x, y=y, col=col, size=size, shape=shape))+ 
   theme_minimal()+
@@ -129,7 +129,7 @@ data.frame(x = tsne_out$Y[,1],
 
 #Remove batch effects
 limmads <- limma::removeBatchEffect(x=assay(dds),
-    batch = metadata[rownames(t(assay(dds))),]$biopsy_location)
+    batch = htx.sample_data[rownames(t(assay(dds))),]$biopsy_location)
 
 limtsne_out <- Rtsne(t(limmads),
                  check_duplicates = FALSE,
@@ -140,10 +140,10 @@ limtsne_out <- Rtsne(t(limmads),
 
 data.frame(x = limtsne_out$Y[,1], 
             y = limtsne_out$Y[,2], 
-            diagnosis = metadata[colnames(cts),]$diagnosis, 
-           col = metadata[colnames(cts),]$biopsy_location, 
-            size = metadata[colnames(cts),]$consent_age,
-            shape = metadata[colnames(cts),]$diagnosis) %>% 
+            diagnosis = htx.sample_data[colnames(cts),]$diagnosis, 
+           col = htx.sample_data[colnames(cts),]$biopsy_location, 
+            size = htx.sample_data[colnames(cts),]$consent_age,
+            shape = htx.sample_data[colnames(cts),]$diagnosis) %>% 
   ggplot() + 
   geom_point(aes(x=x, y=y, col=col, shape=shape, size = size))+ 
   theme_minimal()+
@@ -153,13 +153,13 @@ data.frame(x = limtsne_out$Y[,1],
 # Differential expression
 ## DEGs
 ```{r}
-metadata<- metadata %>%
+htx.sample_data<- htx.sample_data %>%
   rownames_to_column('external_id') %>% 
   mutate(dummy_loc = case_when(biopsy_location=='Ileum' ~ 'Ileum', 
                                TRUE ~ 'Non-ileum')) %>% 
   column_to_rownames('external_id')
 
-colData(dds)<- DataFrame(metadata)  
+colData(dds)<- DataFrame(htx.sample_data)  
   
 # idx  <- rowMeans(dat) > 1
 # dat  <- dat[idx, ]
@@ -176,10 +176,10 @@ colData(dds)<- DataFrame(metadata)
 
 # DESeq2
 ```{r, warning=F}
-# colData(dds) = cbind(metadata[colnames(dat),], as.data.frame(svseq$sv) %>% clean_names)
+# colData(dds) = cbind(htx.sample_data[colnames(dat),], as.data.frame(svseq$sv) %>% clean_names)
 # svs = as.data.frame(svseq$sv)
 # colnames(svs)
-# colData(dds) = cbind(DataFrame(metadata), DataFrame(svs))
+# colData(dds) = cbind(DataFrame(htx.sample_data), DataFrame(svs))
 dds$biopsy_location <- as.factor(dds$biopsy_location)
 dds$dummy_loc <- as.factor(dds$dummy_loc)
 
@@ -210,8 +210,8 @@ rmtsne_out <- Rtsne(t(counts(diagdds, normalized=T)),
 
 data.frame(x = rmtsne_out$Y[,1], 
             y = rmtsne_out$Y[,2], 
-            diagnosis = metadata[colnames(dat),]$diagnosis,
-            biopsy_location = metadata[colnames(dat),]$biopsy_location) %>% 
+            diagnosis = htx.sample_data[colnames(dat),]$diagnosis,
+            biopsy_location = htx.sample_data[colnames(dat),]$biopsy_location) %>% 
   ggplot() + 
   geom_point(aes(x=x, y=y, shape=diagnosis, color=biopsy_location), size = 2.5)+ 
   theme_minimal()+
@@ -228,8 +228,8 @@ rmtsne_out <- Rtsne(t(assay(vsd)),
 
 data.frame(x = rmtsne_out$Y[,1], 
             y = rmtsne_out$Y[,2], 
-            diagnosis = metadata[colnames(dat),]$diagnosis,
-            biopsy_location = metadata[colnames(dat),]$biopsy_location) %>% 
+            diagnosis = htx.sample_data[colnames(dat),]$diagnosis,
+            biopsy_location = htx.sample_data[colnames(dat),]$biopsy_location) %>% 
   ggplot() + 
   geom_point(aes(x=x, y=y, shape=diagnosis, color=biopsy_location), size = 2.5)+ 
   theme_minimal()+
@@ -336,10 +336,10 @@ write.csv(res2df, file.path(project_folder,'results/RNASeq/DEGs_CD.csv'))
 
 # Limma
 ```{r eval=FALSE, include=FALSE}
-eset <- ExpressionSet(assay(dds),AnnotatedDataFrame(metadata[colnames(assay(dds)),]))
+eset <- ExpressionSet(assay(dds),AnnotatedDataFrame(htx.sample_data[colnames(assay(dds)),]))
 design <-  model.matrix(as.formula(paste('~dummy_loc +', paste(#'biopsy_location + consent_age + ',
                                          paste(colnames(svs), collapse='+ ')), '+ diagnosis')),
-                         data = metadata[colnames(counts(dds)),] %>% 
+                         data = htx.sample_data[colnames(counts(dds)),] %>% 
                           bind_cols(svs))
 
 normcts <- voom(counts(dds),
@@ -347,12 +347,12 @@ normcts <- voom(counts(dds),
 
 consensus <- duplicateCorrelation(normcts, 
                                   design,
-                                  block = metadata[colnames(counts(dds)),]$biopsy_location)
+                                  block = htx.sample_data[colnames(counts(dds)),]$biopsy_location)
 
 normcts <- voom(counts(dds), 
                 design, 
                 plot=TRUE,
-                block = metadata[colnames(counts(dds)),]$biopsy_location,
+                block = htx.sample_data[colnames(counts(dds)),]$biopsy_location,
                 correlation = consensus$consensus)
 
 vrmtsne_out <- Rtsne(t(normcts$weights),
@@ -364,8 +364,8 @@ vrmtsne_out <- Rtsne(t(normcts$weights),
 
 data.frame(x = vrmtsne_out$Y[,1], 
             y = vrmtsne_out$Y[,2], 
-            diagnosis = metadata[rownames(t(assay(dds))),]$diagnosis,
-            biopsy_location = metadata[rownames(t(assay(dds))),]$biopsy_location) %>% 
+            diagnosis = htx.sample_data[rownames(t(assay(dds))),]$diagnosis,
+            biopsy_location = htx.sample_data[rownames(t(assay(dds))),]$biopsy_location) %>% 
   ggplot() + 
   geom_point(aes(x=x, y=y, shape=diagnosis, color=biopsy_location), size = 2.5)+ 
   theme_minimal()+
@@ -376,7 +376,7 @@ data.frame(x = vrmtsne_out$Y[,1],
 ```{r eval=FALSE, include=FALSE}
 fit <- lmFit(normcts,
              design,
-             block=metadata[colnames(counts(dds)),]$biopsy_location,
+             block=htx.sample_data[colnames(counts(dds)),]$biopsy_location,
              correlation=consensus$consensus)
 fit <- eBayes(fit)
 
@@ -588,7 +588,16 @@ reactome_genes[CD_RAout$ID] %>%
 ```
 
 ```{r}
-sessionInfo()
+saveRDS(htx.sample_data, file.path(basepath, 'tmp/htx.sample_data.Rds'))
+saveRDS(cts, file.path(basepath, 'tmp/cts.Rds'))
+saveRDS(res1, file.path(basepath, 'tmp/res1.Rds'))
+saveRDS(res2, file.path(basepath, 'tmp/res2.Rds'))
+saveRDS(res1df, file.path(basepath, 'tmp/res1df.Rds'))
+saveRDS(res2df, file.path(basepath, 'tmp/res2df.Rds'))
+
+rm(basepath)
 save.image(file.path(project_folder,'tmp/host_transcriptomics.RData'))
+
+sessionInfo()
 ```
 
