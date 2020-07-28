@@ -103,15 +103,15 @@ def ML_train_class(X_train, X_test, y_train, y_test, savename=None, seed=42):
                            multi_class='multinomial',
                            solver='lbfgs', max_iter=500),
       KNeighborsClassifier(n_neighbors = 8),
-      RandomForestClassifier(n_estimators=100, n_jobs=8, random_state=seed),
+      RandomForestClassifier(n_estimators=100, n_jobs=-1, random_state=seed),
       MLPClassifier(alpha=10, random_state=seed,
                     solver='lbfgs', hidden_layer_sizes=[100],
                     max_iter=2000, activation='logistic'),
       GaussianNB(),
-      XGBClassifier(random_state=seed, n_jobs=8, 
+      XGBClassifier(random_state=seed, n_jobs=-1, 
                     objective='multi:softmax', num_class=3),
       OneVsRestClassifier(SVC(kernel='linear',probability=True),
-                          n_jobs=8)
+                          n_jobs=-1)
       ]
 
   models = list(zip(modelnames, classifiers))
@@ -124,7 +124,7 @@ def ML_train_class(X_train, X_test, y_train, y_test, savename=None, seed=42):
   for name, model in models:
       kfold = StratifiedKFold(n_splits=10, shuffle=True, random_state=seed)
       cv_results = cross_val_score(model, X_train, y_train,
-                                   cv=kfold, scoring=scoring, n_jobs=12)
+                                   cv=kfold, scoring=scoring, n_jobs=-1)
       results.append(cv_results)
       names.append(name)
       msg = "%s: %f (%f)" % (name, cv_results.mean(), cv_results.std())
@@ -133,10 +133,6 @@ def ML_train_class(X_train, X_test, y_train, y_test, savename=None, seed=42):
   # ### Models predictions
   log.append("Saving predictions for each model")
   for name, model in list(models):
-      #params = {}
-      #rs = RandomizedSearchCV(model, param_distributions=params, cv=kfold, n_iter=4, n_jobs=-1)
-      #rs.fit(X_train, y_train)
-      #predictions = rs.best_estimator_.predict(X_test)
       for i, _ in kfold.split(X_train, y_train):
         features = pd.DataFrame(X_train).iloc[i,:]
         cats = pd.DataFrame(y_train).iloc[i,:]
@@ -170,7 +166,7 @@ def ML_predict_best(X_train, X_test, y_train, y_test, best_model, tune=False, cv
                             cv_params,
                             scoring = 'f1_weighted',
                             cv = 10,
-                            n_jobs = 8)
+                            n_jobs = -1)
     seed = 42
     optimized_model.fit(X_train.values, y_train)     
     
@@ -348,7 +344,7 @@ def GMML(X_train, X_test, y_train, y_test, category, clusters_train=pd.DataFrame
   if estimator is None:
     estimator = XGBClassifier(random_state=seed, 
                               objective='multi:softprob', 
-                              num_class=3, n_jobs=8)
+                              num_class=3, n_jobs=-1)
 
   #Vanilla model
   if len(random_effects)==0 and len(fixed_effects)==0:
@@ -399,7 +395,7 @@ def GMML(X_train, X_test, y_train, y_test, category, clusters_train=pd.DataFrame
                                     cv=5, gll_early_stop_threshold=0.1,
                                     max_iterations=max_iter, 
                                     min_iterations=min_iter, 
-                                    n_jobs=8, 
+                                    n_jobs=-1, 
                                     verbose=True)
 
     features = X_train.\
@@ -474,7 +470,7 @@ def GMML(X_train, X_test, y_train, y_test, category, clusters_train=pd.DataFrame
       gmme_re = GeneralMixedEffectsModel(estimator=estimator.set_params(**grid), 
                                       cv=5, gll_early_stop_threshold=0.1,
                                       max_iterations=max_iter, min_iterations=min_iter, 
-                                      n_jobs=8, verbose=True)
+                                      n_jobs=-1, verbose=True)
 
       features = X_train.\
                     drop(random_effects + \
@@ -549,7 +545,7 @@ def GMML(X_train, X_test, y_train, y_test, category, clusters_train=pd.DataFrame
     gmme_me = GeneralMixedEffectsModel(estimator=estimator.set_params(**grid), 
                                     cv=5, gll_early_stop_threshold=0.1,
                                     max_iterations=max_iter, min_iterations=min_iter, 
-                                    n_jobs=8, verbose=True)
+                                    n_jobs=-1, verbose=True)
 
     features = X_train
     Z_train = np.concatenate([np.ones((len(features), 1)), 
