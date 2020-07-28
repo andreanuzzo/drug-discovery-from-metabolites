@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 
 mkdir raw_data
 mkdir lookup_tables
@@ -17,3 +17,7 @@ wget http://www.hmdb.ca/system/downloads/current/hmdb_metabolites.zip -O raw_dat
 unzip raw_data/HMDB.zip -d raw_data
 
 source .venv/bin/activate && python3 scripts/HMDB_parser.py && deactivate
+
+#Supplementary Tables from Lloyd-Price et al. 2020
+wget -q -O raw_data/.tmp.zip https://static-content.springer.com/esm/art%3A10.1038%2Fs41586-019-1237-9/MediaObjects/41586_2019_1237_MOESM6_ESM.zip 
+unzip raw_data/.tmp.zip -d elaborated_data
