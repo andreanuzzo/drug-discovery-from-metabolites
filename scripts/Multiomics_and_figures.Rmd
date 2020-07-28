@@ -326,11 +326,6 @@ chembl_similars <- fread(file.path(basepath,'elaborated_data/CHEMBL25.CFP.csv.gz
               select(HMDB = tar_name, analog=chembl_id, similarity) %>%
               mutate(similarity_type = 'Tversky_sub')
             )%>%
-#  bind_rows(fread(file.path(basepath,'elaborated_data/BioMAP_CHEMBL25.CFP.csv')) %>%
-#              clean_names() %>% 
-#              select(HMDB = tar_name, analog=chembl_id, similarity) %>% 
-#              mutate(similarity_type = 'Tanimoto')
-#            ) %>%
   mutate(association='ChEMBL')
 
 
@@ -1055,6 +1050,8 @@ bioMAP_plot <- readxl::read_xlsx(file.path(basepath, 'elaborated_data/Supplement
 
 bioMAP_plot
 ggsave(file.path(basepath,'results/manuscript_files/Fig5a.pdf'), device = 'pdf', width = 5, height = 10, units = 'in')
+file.copy(file.path(basepath, 'elaborated_data/Supplementary_Table5.xlsx'), 
+          file.path(basepath, 'results/manuscript_files/Supplementary_Table5.xlsx'))
 ```
 
 # Metabolomics results
@@ -1252,7 +1249,7 @@ gmml.me.shap <- fread(file.path(basepath,'results/GMML/mbx_gmme_me_XGBClassifier
 ```
 
 ## GLL 
-```{r eval=FALSE}
+```{r}
 gmml_mod_me <- py_load_object(file.path(basepath,'tmp/GMML/mbx_gmme_me_XGBClassifier.sav'))
 gmml_mod_cl <- py_load_object(file.path(basepath,'tmp/GMML/mbx_gmme_cl_XGBClassifier.sav'))
 
@@ -1300,7 +1297,7 @@ gll.plot <- ggplot(gll.df)+
 ```
 
 ## FigS1
-```{r eval=FALSE, fig.width=15, fig.height=8}
+```{r fig.width=15, fig.height=8}
 fig.s1 <- ggarrange(
   ggarrange(
     ggarrange(mwu.volcano+
@@ -1376,7 +1373,6 @@ fread(file.path(basepath,'results/summaries/mwu_summaries.csv')) %>%
               select(HMP2_metab,
                      Ontology = intersection)) %>% 
   openxlsx::write.xlsx(file.path(basepath,'results/manuscript_files/Supplementary_Table1.xlsx'))
-
   
 ```
 
@@ -1446,7 +1442,7 @@ scoring.plot <- master_mbx %>%
 
 ```
 
-#Scatterplots
+## Scatterplots
 ```{r}
 consensus.p_mwu <- 
   master_mbx %>% 
@@ -1794,16 +1790,17 @@ ggsave(file.path(basepath,'results/manuscript_files/FigS4.pdf'), device = 'pdf',
 ```
 
 # Fig S5
-```{r}
-# Note: Figure 4 and S5 are made manually via Cytoscape 3.8.0
+```{r eval=FALSE}
+# Note: Figure 4 and S5 are made via Cytoscape 3.8.0
 
 # Data is exported via 
 
-# library(RCy3)
-# cytoscapePing()
-# fg %>% 
-#   as.igraph %>% 
-#   createNetworkFromIgraph
+library(RCy3)
+cytoscapePing()
+ 
+fg %>% 
+  as.igraph %>% 
+  createNetworkFromIgraph
 
 ```
 
@@ -1923,8 +1920,7 @@ Sup2 %>%
          ) %>% 
   cSplit('Targets', 'long', sep = '; ') %>% 
   openxlsx::write.xlsx(file.path(basepath,'results/manuscript_files/Supplementary_Table2.xlsx'))
-
-
+  
 ```
 
 
@@ -2169,10 +2165,10 @@ target_prioritization %>%
   
 ```
 
-
 ```{r}
+.basepath <- basepath
 rm(basepath)
-save.image(file.path('tmp/multiomics.RData'))
+save.image(file.path(.basepath, 'tmp/multiomics.RData'))
 
 rm(list = ls())
 sessionInfo()
