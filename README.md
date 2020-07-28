@@ -17,7 +17,7 @@ The elaborated data and sample data from the HMP2 original [IBD study](https://d
 ## Databases:
 - Metabolites annotation is parsed from the [HMDB database](https://hmdb.ca) (as of May 2020)
 - Functional assay data are parsed from [ChEMBL v.25](https://www.ebi.ac.uk/chembl/). Those are not parsed dynamically, but elaborated files are stored
-- Genetic association data are parsed from [GWAS catalog](https://www.ebi.ac.uk/gwas/)(dynamically) and [OMIM](https://www.omim.org/) (pre-processed)
+- Genetic association data are parsed from [GWAS catalog](https://www.ebi.ac.uk/gwas/)(as of July 14, 2020) and [OMIM](https://www.omim.org/) (as of May 28, 2020)
 
 ## Steps to reproduce the analysis:
 1. Clone the repository 
@@ -27,7 +27,7 @@ cd path/to/working/dir
 ```
 2. Prepare the environment (in the same folder)
 ```
-## Note: requires  R <= 3.5.0 and Python => 3.6.0
+## Note: requires  R <= 3.5.2 and Python => 3.6.0
 
 ## R packages
 RENV_VERSION=0.10.0-46
