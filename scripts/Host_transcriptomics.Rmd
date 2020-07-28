@@ -176,22 +176,10 @@ colData(dds)<- DataFrame(htx.sample_data)
 
 # DESeq2
 ```{r, warning=F}
-# colData(dds) = cbind(htx.sample_data[colnames(dat),], as.data.frame(svseq$sv) %>% clean_names)
-# svs = as.data.frame(svseq$sv)
-# colnames(svs)
-# colData(dds) = cbind(DataFrame(htx.sample_data), DataFrame(svs))
 dds$biopsy_location <- as.factor(dds$biopsy_location)
 dds$dummy_loc <- as.factor(dds$dummy_loc)
 
-# design(dds) <- as.formula(paste('~dummy_loc +', paste(#'biopsy_location + consent_age + ',
-#                                            paste(colnames(svs), collapse='+ '))
-#                                 , '+ diagnosis'))
-
-#design(dds) <- ~dummy_loc + diagnosis 
 design(dds) <- ~diagnosis*dummy_loc
-
-##Remove outliers
-# dds <- dds[,!rownames(colData(dds)) %in% colnames(dds)[svseq$sv[, 1] > 0.3]]
 
 diagdds <- DESeq(dds, #test="LRT", reduced=~biopsy_location,
                  sfType = 'poscounts', parallel=TRUE,
@@ -216,8 +204,6 @@ data.frame(x = rmtsne_out$Y[,1],
   geom_point(aes(x=x, y=y, shape=diagnosis, color=biopsy_location), size = 2.5)+ 
   theme_minimal()+
   ggthemes::scale_color_pander()
-
-# ggsave('rtsne.png', device = 'png', dpi = 720,height = 4,  width = 7)
 
 rmtsne_out <- Rtsne(t(assay(vsd)),
                  check_duplicates = FALSE,
@@ -250,18 +236,6 @@ res1 <- results(diagdds,
                 #contrast = c('diagnosis','UC','nonIBD')
                 )
 
-# res1 <- lfcShrink(diagdds, res=res1,
-#                   type="ashr", 
-#                   contrast=list(
-#                   c("diagnosis_UC_vs_nonIBD","diagnosisUC.dummy_locNon.ileum")
-#                   # c('diagnosisUC.dummy_locIleum', 'diagnosisnonIBD.dummy_locIleum'), 
-#                   # c('diagnosisUC.dummy_locNon.ileum', 'diagnosisnonIBD.dummy_locNon.ileum')
-#                               ),
-#                 #contrast = c('diagnosis','UC','nonIBD'),
-#                   parallel=TRUE,
-#                   BPPARAM = MulticoreParam(( parallel::detectCores()-2 ))
-#             )
-
 res1$hgncid=rownames(res1)
 
 
@@ -284,16 +258,6 @@ res2 <- results(diagdds,
                               )
                 #contrast = c('diagnosis','CD','nonIBD')
                 )
-
-# res2 <- lfcShrink(diagdds, res=res2,
-#                   type="ashr", 
-#                   #contrast = c('diagnosis','UC','nonIBD'), 
-#                   contrast=list(c('diagnosisCD.dummy_locIleum', 'diagnosisnonIBD.dummy_locIleum'), 
-#                                 c('diagnosisCD.dummy_locNon.ileum', 'diagnosisnonIBD.dummy_locNon.ileum')),
-#                   parallel=TRUE,
-#                   BPPARAM = MulticoreParam(( parallel::detectCores()-2 ))
-#             )
-# 
 
 res2$hgncid=rownames(res2)
 
@@ -320,9 +284,6 @@ ggpubr::ggarrange(
   common.legend = T, legend = 'bottom', labels = 'auto'
 )
 
-#ggsave('results/manuscript_files/Fig2.pdf', device = 'pdf', width = 16, height = 6, units = 'in')
-
-
 res2df <- as.data.frame(res2) %>% 
             filter(padj<1e-2, 
                    abs(log2FoldChange) >0.5
@@ -332,44 +293,6 @@ res2df <- as.data.frame(res2) %>%
 
 write.csv(res2df, file.path(project_folder,'results/RNASeq/DEGs_CD.csv'))
 
-```
-
-# Limma
-```{r eval=FALSE, include=FALSE}
-eset <- ExpressionSet(assay(dds),AnnotatedDataFrame(htx.sample_data[colnames(assay(dds)),]))
-design <-  model.matrix(as.formula(paste('~dummy_loc +', paste(#'biopsy_location + consent_age + ',
-                                         paste(colnames(svs), collapse='+ ')), '+ diagnosis')),
-                         data = htx.sample_data[colnames(counts(dds)),] %>% 
-                          bind_cols(svs))
-
-normcts <- voom(counts(dds),
-                design)
-
-consensus <- duplicateCorrelation(normcts, 
-                                  design,
-                                  block = htx.sample_data[colnames(counts(dds)),]$biopsy_location)
-
-normcts <- voom(counts(dds), 
-                design, 
-                plot=TRUE,
-                block = htx.sample_data[colnames(counts(dds)),]$biopsy_location,
-                correlation = consensus$consensus)
-
-vrmtsne_out <- Rtsne(t(normcts$weights),
-                 check_duplicates = FALSE,
-                 perplexity=50,
-                 partial_pca = TRUE,
-                 theta=0.1,
-                 num_threads=parallel::detectCores()-2)
-
-data.frame(x = vrmtsne_out$Y[,1], 
-            y = vrmtsne_out$Y[,2], 
-            diagnosis = htx.sample_data[rownames(t(assay(dds))),]$diagnosis,
-            biopsy_location = htx.sample_data[rownames(t(assay(dds))),]$biopsy_location) %>% 
-  ggplot() + 
-  geom_point(aes(x=x, y=y, shape=diagnosis, color=biopsy_location), size = 2.5)+ 
-  theme_minimal()+
-  ggthemes::scale_color_pander()
 ```
 
 ## Results
@@ -405,9 +328,7 @@ EnhancedVolcano(fitres,
                )
 ```
 
-
-
-#Enrichment analysis
+# Enrichment analysis
 ```{r}
 ensembl = useMart("ensembl",dataset="hsapiens_gene_ensembl")
 
@@ -426,7 +347,7 @@ entrezids.CD <- getBM(attributes = 'entrezgene_id',
                      mart = ensembl)
 ```
 
-##GSEA
+## GSEA
 ```{r}
 hgcUC <- hyperGTest(new("GOHyperGParams",annotation="org.Hs.eg",
                         geneIds=entrezids.UC$entrezgene_id,
@@ -461,7 +382,7 @@ gseaCD %>%
   write_csv(file.path(project_folder,'results/RNASeq/GSEA_CD.csv'))
 ```
 
-##Protein interaction network
+## Protein interaction network
 
 ```{r}
 dir.create(file.path(project_folder, 'results/RNASeq/PIN'))
