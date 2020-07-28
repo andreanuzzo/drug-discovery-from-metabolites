@@ -53,5 +53,22 @@ bash scripts/get_data.sh
 bash scripts/run_analysis.sh $PATH_TO_YOUR_DIRECTORY
 ```
 5. Figures and tables from the manuscript will be reproduced in `$PATH_TO_YOUR_DIRECTORY/results/manuscript_files` as follows:
-  ** Fig.1 
+ - Fig.1: Metabolomics analysis
+ - Fig.2: Metabolite - Target connections based upon metabolomics analysis
+ - Fig.3: Host transcriptomics analysis results and Target - Metabolite connections based upon them
+ - Fig.4: GGraph version of Target - Metabolite connection for NOS2, HTR4, GABRG2, SLC22A3 (note: manuscript used the Cytoscape version)
+ - Fig.5a: BioMAP results for the selected metabolites (Fig 5b was done in [MetaCore™](https://portal.genego.com/cgi/data_manager.cgi#))
+ 
+ - Supplementary Fig.1: Overview of Metabolomics results for each analysis method
+ - Supplementary Fig.2: Overview of consensus scoring across metabolomics analysis methods
+ - Supplementary Fig.3: Metabolite scoring classification per each metabolite source (as per HMDB classification)
+ - Supplementary Fig.4: Host transcriptomics analysis results
+ - Supplementary Fig.6: Full BioMAP results for the selected metabolites
+ 
+ - Supplementary_Table1.xlsx: Full table of metabolomics analysis results
+ - Supplementary_Table2.xlsx: Full table of Metabolite - Target connections based upon metabolomics analysis
+ - Supplementary_Table3.xlsx: Full table of Target - Metabolite connections based upon host transcriptomics analysis
+ - Supplementary_Table4.xlsx: Full table of Target - Metabolite connections based upon genetic association to diseases
+ - Supplementary_Table5.xlsx: Full BioMAP results for the selected metabolites
+ - Supplementary_Table6.xlsx: Full table of Metabolite-Target associations with high confidence
 
