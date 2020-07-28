@@ -1,4 +1,7 @@
-#!/bin/bash
+#!/bin/sh
+basepath=$(echo "$1/$line")
+
+cd $basepath
 
 mkdir raw_data
 mkdir lookup_tables
