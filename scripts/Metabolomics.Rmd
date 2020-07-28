@@ -268,15 +268,6 @@ mbxldata <- fread(file.path(basepath,'tmp/mbx_elab_full.csv')) %>%
   mutate_at(vars(-diagnosis), ~scale(.)[,1]) %>% 
   mutate(diagnosis=factor(diagnosis))
 
-# MASS::lda(formula=diagnosis~., data = mbxldata) %>%
-#   predict(.) %>%
-#   data.frame(diagnosis = .$class, .$x) %>%
-#   ggplot() +
-#   geom_point(aes(LD1, LD2, colour = diagnosis), size = 2.5)+
-#   theme_minimal()+
-#   scale_colour_viridis_d(begin = .1, end = .8)+
-#   xlab('LD1 (59.55%)')+
-#   ylab('LD2 (40.45%)')
 ```
 
 # Check impact of confounding variables 
@@ -311,12 +302,12 @@ source_python(file.path(basepath,'scripts/dbmwu.py'))
 
 dir.create(file.path(basepath,'results'))
 
-#results <- dbmwu(
-#  r_to_py(
-#    abundances%>% 
-#      select(2:diagnosis)
-#    )
-#  )
+results <- dbmwu(
+  r_to_py(
+    abundances%>% 
+      select(2:diagnosis)
+    )
+  )
 
 #Example of one results plot
 dabest_results  <- 
@@ -329,31 +320,6 @@ dabest_results  <-
 
 #write_csv(results, file.path(basepath,'results/dbmwu_results.csv'))
 ```
-
-# Linear mixed models (Maaslin2)
-```{r eval=FALSE, include=FALSE}
-abundances <- fread(file.path(basepath,'tmp/mbx_elab_full.csv')) %>% 
-  mutate_if(is.numeric, ~replace_na(.,0)) %>% #~replace_na(.,min(., na.rm = TRUE)/10)) %>% 
-  select(external_id, contains('HMDB'), contains('redundant')) %>%
-  tibble::column_to_rownames('external_id')
-
-maaslin_variables <- fread(file.path(basepath,'tmp/mbx_elab_full.csv')) %>%
-  mutate(diagnosis = case_when(diagnosis== 'nonIBD' ~ 'Control', 
-                               diagnosis== 'UC' ~ 'Lev1. UC',
-                               diagnosis== 'CD'~ 'Lev2. CD')) %>%
-  tibble::column_to_rownames('external_id') %>% 
-  select(diagnosis, site_name, participant_id, consent_age, antibiotics)
-
-mbx_full.fitting2 <- Maaslin2(abundances, maaslin_variables, 
-                            file.path(basepath,'results/maaslin2'), 
-                            normalization = 'NONE', 
-                            transform='NONE',
-                            analysis_method = 'LM',
-                            random_effects = c('site_name','participant_id'), 
-                            cores=16)
-
-```
-
 
 # Machine Learning models
 ## Prepare
@@ -418,7 +384,7 @@ cm$table %>%
 
 ```
 
-## Explaination
+## Explanation
 ```{r}
 dir.create(file.path(basepath, 'results/ML'))
 
@@ -500,7 +466,7 @@ cm$table %>%
 ```
 
 ## Optimization
-```{r, eval=FALSE, warning=FALSE}
+```{r, warning=FALSE}
 cv_params <- dict(
   #max_depth= as.integer(c(5,10,15)) 
   #min_child_weight= c(1,3,6,10),
@@ -579,7 +545,7 @@ gmml_res_cl <- GMML(X_train = train_obj[[1]], X_test = train_obj[[2]],
                  y_train = train_obj[[3]], y_test = train_obj[[4]],
                  category = r_to_py(diagnosis_v), 
                  clusters_train = train_obj[[5]], clusters_test = train_obj[[6]],
-                 savename='mbx', min_iter = 1, max_iter = 2)
+                 savename='mbx', min_iter = 10, max_iter = 20)
 
 gmml_mod_cl <- py_load_object(file.path(basepath,'tmp/GMML/mbx_gmme_cl_XGBClassifier.sav'))
 
@@ -654,7 +620,7 @@ gmml_res_me <- GMML(X_train = train_obj[[1]], X_test = train_obj[[2]],
                  clusters_train = train_obj[[5]], clusters_test = train_obj[[6]],
                  random_effects = r_to_py(list('site_name')),
                  fixed_effects = r_to_py(list('antibiotics','consent_age')),
-                 savename='mbx', min_iter = 1, max_iter = 2)
+                 savename='mbx', min_iter = 10, max_iter = 20)
 
 gmml_mod_me <- py_load_object(file.path(basepath,'tmp/GMML/mbx_gmme_me_XGBClassifier.sav'))
 
@@ -773,9 +739,6 @@ XGB_shapi %>%
   full_join(XGB_fi) %>% 
   write_tsv(file.path(basepath,'results/summaries/XGB_res_summary.tsv'))
 
-##Mixed effects linear models
-# No results?
-
 # Mixed effects ML
 GMME_shapi <- fread(file.path(basepath,'results/GMML/mbx_gmme_XGBClassifier_shapi.csv')) %>%
   rename(HMDB=mbx,
@@ -826,16 +789,6 @@ master_mbx %>%
                               is.na(.) ~ 0.1,
                               is.numeric(.) ~-log10(.), 
                               TRUE~.)))%>% 
-  # mutate_at(vars(contains('shap')), 
-  #           list(~case_when(is.numeric(.) & .==0 ~ 1e-6,
-  #                             is.na(.) ~ 1e-6,
-  #                             is.numeric(.) ~ 100*(.), 
-  #                             TRUE~.)))%>%
-  # mutate_at(vars(contains('fi')), 
-  #           list(~case_when(is.numeric(.) & .==0 ~ 1e-3,
-  #                             is.na(.) ~ 1e-3,
-  #                             is.numeric(.) ~ 1000*(.), 
-  #                             TRUE~.))) %>% 
   ungroup %>% 
   mutate_at(vars(contains('fi'), contains('shap'), 'gain', contains('pvalue')), 
             list(~case_when(is.numeric(.) ~ rescale(., to=c(0,1)),
@@ -863,18 +816,6 @@ master_mbx <-master_mbx %>%
                               is.na(.) ~ 0.1,
                               is.numeric(.) ~-log10(.),
                               TRUE~.)))%>%
-  # mutate_at(vars(contains('shap')), 
-  #           list(~case_when(is.numeric(.) & .==0 ~ 1e-6,
-  #                             is.na(.) ~ 1e-6,
-  #                             is.numeric(.) ~ 100*(.), 
-  #                             TRUE~.)))%>%
-  # mutate_at(vars(contains('fi')), 
-  #           list(~case_when(is.numeric(.) & .==0 ~ 1e-3,
-  #                             is.na(.) ~ 1e-3,
-  #                             is.numeric(.) ~ 1000*(.), 
-  #                             TRUE~.))) %>% 
-  # #summarize_if(is.numeric, mean, na.rm=TRUE) %>% 
-  # #rowwise %>% 
   mutate_at(vars(contains('fi'), contains('shap'), 'gain', contains('pvalue')), 
             list(~ case_when(is.numeric(.) ~ rescale(replace_na(.,0), to=c(0,1)),
                               TRUE~.))) %>% 
@@ -912,14 +853,6 @@ master_mbx <-
                     'ranking')) %>%
          mutate(diagnosis='UC')
     ) %>% 
-  # bind_rows(
-  #   master_mbx %>%
-  #   select(HMDB, matches('nonIBD')) %>%
-  #   `colnames<-` (c('HMDB',
-  #                   'XGB_shap', 'GMME_shap',
-  #                   'ranking')) %>%
-  #        mutate(diagnosis='nonIBD')
-  #   ) %>%
   separate(HMDB, c('HMDB','HMP2_metab'), sep='; ') %>% 
   #mutate(HMDB=str_remove_all(HMDB, '\\*')) %>% 
   select(-HMDB) %>% 
