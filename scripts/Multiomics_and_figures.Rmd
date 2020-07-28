@@ -1,7 +1,7 @@
 ---
 title: "Figures"
 params:
-  base_path: '../'
+  basepath: '../'
 output:
   html_document:
     fig_height: 7
@@ -14,12 +14,16 @@ editor_options:
   chunk_output_type: inline
 ---
 ```{r}
-basepath <- params$base_path
+basepath <- params$basepath
 ```
 
 ```{r setup, warning=FALSE, message=FALSE}
-knitr::opts_knit$set(root.dir=basepath, dpi=600)
-knitr::opts_chunk$set(root.dir = basepath, dpi=600)
+knitr::opts_knit$set(root.dir= basepath, dpi=600, cache=TRUE)
+knitr::opts_chunk$set(root.dir = basepath, dpi=600, cache=TRUE)
+knitr::knit_engines$set(python = reticulate::eng_python, cache=TRUE)
+
+library(reticulate)
+reticulate::use_virtualenv(file.path(basepath, '.venv/'), required = T)
 
 library(ComplexUpset)
 library(data.table)
@@ -70,7 +74,7 @@ hmdb_ref <- fread(file.path(basepath,'tmp/hmdb_ref_w_origin.csv'))
 #Load results
 metab_results <- fread(file.path(basepath,'results/summaries/master_mbx.tsv'))
 HMP2_metabs <- 
-  readxl::read_xlsx(file.path(basepath,'tmp/Supplementary Tables 1-28.xlsx'), 
+  readxl::read_xlsx(file.path(basepath,'elaborated_data/Supplementary Tables 1-28.xlsx'), 
                     sheet=2) %>%
   left_join(metab_results %>% 
               select(Metabolites, HMP2_metab), 
@@ -146,7 +150,7 @@ up.df <-  metab_results %>%
               mutate(diagnosis=str_to_upper(diagnosis)) %>% 
               select(-metabolites), 
             by=c('HMP2_metab'='feature', 'diagnosis'))  %>%
-  select(-KEGG, -hgncid, -SMILES)%>% 
+  select(-KEGG, -SMILES)%>% 
   mutate(Metabolites = coalesce(Metabolites, HMP2_metab)) %>% 
   group_by(HMP2_metab, diagnosis) %>% 
   distinct(ranking, q_value, .keep_all = T) %>% 
@@ -236,7 +240,7 @@ consensus.hmp2.sig <- HMP2_metabs %>%
   select(-metabolites) %>% 
   full_join(metab_results, 
             by=c('feature'='HMP2_metab', 'diagnosis'))  %>% 
-  select(-KEGG, -hgncid, -SMILES)%>% 
+  select(-KEGG, -SMILES)%>% 
   distinct_all %>% 
   ggplot()+
   aes(x=q_value, y=ranking, color=diagnosis)+
@@ -260,7 +264,7 @@ consensus.hmp2.ab <- HMP2_metabs %>%
   select(-metabolites) %>% 
   full_join(metab_results, 
             by=c('feature'='HMP2_metab', 'diagnosis'))  %>% 
-  select(-KEGG, -hgncid, -SMILES)%>% 
+  select(-KEGG, -SMILES)%>% 
   distinct_all %>% 
   ggplot()+
   aes(x=coefficient, y=MWU_delta, color=diagnosis)+
@@ -279,6 +283,8 @@ consensus.hmp2.ab <- HMP2_metabs %>%
 
 ## Fig1
 ```{r, fig.width=12, fig.height=15}
+
+dir.create(file.path(basepath, 'results/manuscript_files'))
 
 (samples.umap + consensus.mwu + 
   patchwork::plot_layout(widths = c(1, 1.5))) /
@@ -320,11 +326,11 @@ chembl_similars <- fread(file.path(basepath,'elaborated_data/CHEMBL25.CFP.csv.gz
               select(HMDB = tar_name, analog=chembl_id, similarity) %>%
               mutate(similarity_type = 'Tversky_sub')
             )%>%
-  bind_rows(fread(file.path(basepath,'elaborated_data/BioMAP_CHEMBL25.CFP.csv')) %>%
-              clean_names() %>% 
-              select(HMDB = tar_name, analog=chembl_id, similarity) %>% 
-              mutate(similarity_type = 'Tanimoto')
-            ) %>%
+#  bind_rows(fread(file.path(basepath,'elaborated_data/BioMAP_CHEMBL25.CFP.csv')) %>%
+#              clean_names() %>% 
+#              select(HMDB = tar_name, analog=chembl_id, similarity) %>% 
+#              mutate(similarity_type = 'Tanimoto')
+#            ) %>%
   mutate(association='ChEMBL')
 
 
@@ -348,7 +354,6 @@ chembl_assays<-fread(file.path(basepath,'elaborated_data/Chembl_f_assays_BIOME.c
 
 target_prioritization <- metab_results %>% 
   mutate(Metabolites = coalesce(Metabolites, HMP2_metab)) %>% 
-  select(-hgncid) %>% 
   distinct_all %>% 
   left_join(chembl_similars) %>% 
   select(Metabolites, HMDB, ranking, MWU_delta, diagnosis, 
@@ -371,7 +376,7 @@ hmdb_ref <- fread(file.path(basepath,'tmp/hmdb_ref_w_origin.csv'))
 
 
 HMP2_important_metabs <- 
-  readxl::read_xlsx(file.path(basepath,'tmp/Supplementary Tables 1-28.xlsx'), 
+  readxl::read_xlsx(file.path(basepath,'elaborated_data/Supplementary Tables 1-28.xlsx'), 
                     sheet=2) %>%
   left_join(metab_results %>% 
               select(Metabolites, HMP2_metab), 
@@ -919,7 +924,7 @@ fg <- m2a %>%
                                         ordered = TRUE)) %>% 
   activate('nodes')
 
-quicknet <- autograph(fg, 
+quicknet <- qgraph(fg, 
        #node_label = label,
        node_colour = weight,
        edge_colour = association) 
@@ -985,8 +990,8 @@ create_graph <- function(i){
      
    }
 
-    ggsave(paste0(file.path(basepath,saveplots), gene_of_interest, '.png'),
-           device = 'png', dpi = 720,height = 10,  width = 16)
+    ggsave(paste0(file.path(basepath,saveplots), gene_of_interest, '.pdf'),
+           device = 'pdf', dpi = 720,height = 10,  width = 16)
     
     plotlist[[i]]
     
@@ -1247,7 +1252,7 @@ gmml.me.shap <- fread(file.path(basepath,'results/GMML/mbx_gmme_me_XGBClassifier
 ```
 
 ## GLL 
-```{r}
+```{r eval=FALSE}
 gmml_mod_me <- py_load_object(file.path(basepath,'tmp/GMML/mbx_gmme_me_XGBClassifier.sav'))
 gmml_mod_cl <- py_load_object(file.path(basepath,'tmp/GMML/mbx_gmme_cl_XGBClassifier.sav'))
 
@@ -1295,7 +1300,7 @@ gll.plot <- ggplot(gll.df)+
 ```
 
 ## FigS1
-```{r, fig.width=15, fig.height=8}
+```{r eval=FALSE, fig.width=15, fig.height=8}
 fig.s1 <- ggarrange(
   ggarrange(
     ggarrange(mwu.volcano+
@@ -1683,7 +1688,7 @@ up.htx.df <- htx_results %>%
   group_by(diagnosis) %>% 
   mutate(in_this_study = case_when(padj<0.05~TRUE, TRUE~FALSE)) %>% 
   ungroup %>% 
-  full_join(readxl::read_xlsx(file.path(basepath,'tmp/Supplementary Tables 31-33.xlsx'), sheet = 1) %>% 
+  full_join(readxl::read_xlsx(file.path(basepath,'elaborated_data/Supplementary Tables 31-33.xlsx'), sheet = 1) %>% 
                mutate(in_HMP2 = case_when(`FDR Pvalue`<0.05~TRUE,TRUE~FALSE)) %>% 
                select(hgncid=Gene, in_HMP2))  %>% 
   filter_at(vars(in_this_study, in_HMP2), any_vars(.!=FALSE)) %>% 

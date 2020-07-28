@@ -588,15 +588,16 @@ reactome_genes[CD_RAout$ID] %>%
 ```
 
 ```{r}
-saveRDS(htx.sample_data, file.path(basepath, 'tmp/htx.sample_data.Rds'))
-saveRDS(cts, file.path(basepath, 'tmp/cts.Rds'))
-saveRDS(res1, file.path(basepath, 'tmp/res1.Rds'))
-saveRDS(res2, file.path(basepath, 'tmp/res2.Rds'))
-saveRDS(res1df, file.path(basepath, 'tmp/res1df.Rds'))
-saveRDS(res2df, file.path(basepath, 'tmp/res2df.Rds'))
+saveRDS(htx.sample_data, file.path(project_folder, 'tmp/htx.sample_data.Rds'))
+saveRDS(cts, file.path(project_folder, 'tmp/cts.Rds'))
+saveRDS(res1, file.path(project_folder, 'tmp/res1.Rds'))
+saveRDS(res2, file.path(project_folder, 'tmp/res2.Rds'))
+saveRDS(res1df, file.path(project_folder, 'tmp/res1df.Rds'))
+saveRDS(res2df, file.path(project_folder, 'tmp/res2df.Rds'))
 
-rm(basepath)
-save.image(file.path(project_folder,'tmp/host_transcriptomics.RData'))
+.project_folder <- project_folder
+rm(project_folder)
+save.image(file.path(.project_folder,'tmp/host_transcriptomics.RData'))
 
 sessionInfo()
 ```

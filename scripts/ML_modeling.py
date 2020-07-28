@@ -340,7 +340,7 @@ def ML_explain(best_model, X_test, category, savename=None, tune=False):
   return '\n'.join(log)
   
 
-def GMML(X_train, X_test, y_train, y_test, category, clusters_train=pd.DataFrame(), clusters_test=pd.DataFrame(), estimator=None, random_effects=[], fixed_effects=[], savename='', max_iter = 20, min_iter=10):
+def GMML(X_train, X_test, y_train, y_test, category, clusters_train=pd.DataFrame(), clusters_test=pd.DataFrame(), estimator=None, random_effects=[], fixed_effects=[], savename='', max_iter = 2, min_iter=1):
   # wdir = os.getcwd()
   log = list()
   seed = 42

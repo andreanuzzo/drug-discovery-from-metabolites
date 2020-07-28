@@ -1,0 +1,181 @@
+hgncid	action	source
+IL-7R	pathway expression    	experimental  
+LPA-1	T-cell attraction    	experimentals  
+NOD2	risk locus    	GWAS  
+TNFSF15	risk locus    	GWAS  
+CARD9	microbe-sensing     	exome  
+IL23R	cytokine networks    	exome  
+RNF186	barrier function    	exome  
+IL10RA	macrophage signaling    	mendelian  
+CASP8	cell-death regulation    	mendelian  
+XIAP	cell-death regulation    	mendelian  
+FOXP3	T-cell regulation    	mendelian  
+CTLA4	T-cell regulation    	mendelian  
+MALT1	NF-kB signaling    	mendelian  
+CYBB	immunodeficiency     	mendelian  
+TTC7A	epithelial polarity    	mendelian  
+PI4P	epithelial polarity    	mendelian  
+EPCAM	adhesion     	mendelian  
+SPINT2	adhesion     	mendelian  
+GUCY2C	diarrhoea     	mendelian  
+CFTR	diarrhoea     	mendelian  
+NHE3	diarrhoea     	mendelian  
+OSM	inflammation     	single cell 
+IL6ST	inflammation     	single cell 
+HNF4A;NR5A2;C1ORF106;GPR35;GSDMB;RNF186	Barrier function;Nutrient absorption   	Enterocyte  
+ITLN1;HGFAC;C1ORF106;RNF186;GSDMB	Barrier function;Mucous secretion   	Goblet cell 
+ITLN1	Antimicrobial peptides;Stem cell niche;Restitution  	Paneth cell 
+PLCG2	Chemosensory sentinel;Type 2 immunity  	Tuft cell 
+NR5A2	Chemosensory sentinel;Digestive hormones;ENS crosstalk  	Enteroendocrine cell 
+NKX2-3;OSMR	Leukocyte trafficking;Angiogenesis;Hypoxia    	Endothelial cell 
+FCGR2A;IFIH1;CARD9;NOD2	Microbe sensing;Microbicidal mechanisms;Antigen presentation;Cytokines  	Macrophage or monocyte
+OSMR;RSPO3	Matrix remodelling;Cytokine sensor;Chemokine effector  	Fibroblast  
+IRF5;IL12B;FCGR2A;NOD2;CARD9	Microbe sensing;Microbicidal mechanisms;Antigen presentation;Cytokines  	Dendritic cell 
+GPR35;GPR65	Degranulation;Vasodilation;Leukocyte trafficking    	Mast cell 
+STAT4;BACH2;PRDM1	Adaptive immunity;IgA;IgG    	B cell 
+STAT4;CD28;IFNG;IKZF1;IL23R;IL2RA	Adaptive immunity;Cytokine effector;Tolerance or inflammation CD4+	T cell 
+IFNG;CD28	Adaptive immunity;Cytokine effector;Cellular toxicity CD8+ 	T cells 
+IL23R;IFNG;CD28	Adaptive immunity γδ;Cytokine effector  	T cell 
+IL23R;IFNG;CD28	Adaptive immunity    	MAIT cell 
+IL23R;GPR65;IFNG	Cytokine sensor;Cytokine effector   	ILC  
+CCL20	Antigen transport;Chemokine effector   	M cell 
+PTGER4	Healing     	pathway  
+NKX2	Restitution pathway    	pathway  
+NKX3	Restitution pathway    	pathway  
+SLC22A23	Restitution pathway    	pathway  
+NR5A2	Restitution pathway    	pathway  
+GCKR	Restitution pathway    	pathway  
+AHR	Restitution pathway    	pathway  
+MST1	UPR pathway    	pathway  
+HGFAC	 UPR pathway   	pathway  
+RSPO3	 UPR pathway   	pathway  
+HNF4A	 UPR pathway   	pathway  
+NOX1	Epitheliar barrier pathway   	pathway  
+C1ORF106	Epitheliar barrier  pathway  	pathway  
+RNF186	Epitheliar barrier  pathway  	pathway  
+NXPE1	ER stress pathway   	pathway  
+ERGIC1	ER stress pathway   	pathway  
+RFT1	ER stress pathway   	pathway  
+SLC39A8	Antimicrobial peptides;Mucus;Secretion pathway   	pathway  
+FUT2	Granule biogenesis pathway   	pathway  
+ATG16L1	Autophagy pathway    	pathway  
+GPR65	Autophagy;Lysosome function;Intracellular defence pathway  	pathway  
+LRRK2	Autophagy;Lysosome function;Intracellular defence pathway  	pathway  
+LACC1	Microbicidal mechanisms pathway   	pathway  
+NCF4	ROS pathway    	pathway  
+ADCY7	ROS pathway    	pathway  
+SKAP2	NO pathway    	pathway  
+NOS2	NO pathway    	pathway  
+SLC39A11	ROS pathway    	pathway  
+KEAP1	Oxidative stress pathway   	pathway  
+NRIP1	Microbe sensing pathway   	pathway  
+TAB2	Cytokines pathway    	pathway  
+JAXF1	Cytokines pathway    	pathway  
+RIPK2	Cytokines pathway    	pathway  
+IFIH1	Microbe sensing pathway   	pathway  
+NOD2	Microbe sensing pathway   	pathway  
+CARD9	Microbe sensing pathway   	pathway  
+HLA	Antigen presentation pathway   	pathway  
+ERAP2	Antigen presentation pathway   	pathway  
+IFNG	Antigen presentation pathway   	pathway  
+CD28	Antigen presentation pathway   	pathway  
+STAT4	TH1 pathway    	pathway  
+ITGA4	TH1 pathway    	pathway  
+IL12B	TH1 pathway    	pathway  
+ITGAV	TH1 pathway    	pathway  
+TMEM258	TH1 pathway    	pathway  
+IL23R	TH17 pathway    	pathway  
+TRAF3IP2	TH17 pathway    	pathway  
+RORC	TH17 pathway    	pathway  
+TNFSF15	TH17 pathway    	pathway  
+SH2B3	TH17 pathway    	pathway  
+IL6ST	TH17 pathway    	pathway  
+SMAD3	Treg pathway    	pathway  
+PTPN22	Adaptive immunity pathway   	pathway  
+JAK2	Cytokines pathway    	pathway  
+TYK2	Cytokines pathway    	pathway  
+TNFAIP3	Tolerance pathway    	pathway  
+IL10	Tolerance;Cytokines pathway    	pathway  
+GSDMB	IgA pathway    	pathway  
+PRKCB	Tolerance pathway    	pathway  
+IL2RA	Adaptive Immunity pathway   	pathway  
+RASGRP1	Adaptive Immunity pathway   	pathway  
+MEFV	Inflammasome pathway    	pathway  
+IZKF1	B cells pathway   	pathway  
+CD40	B cells pathway   	pathway  
+PRDM1	B cells pathway   	pathway  
+BACH2	B cells pathway   	pathway  
+NOD2	Microbe-sensing and effector pathways  	pathway  
+CARD9	Microbe-sensing and effector pathways  	pathway  
+MEFV	Microbe-sensing and effector pathways  	pathway  
+IFIH1	Microbe-sensing and effector pathways  	pathway  
+RIPK2	Microbe-sensing and effector pathways  	pathway  
+FCGR2A	Microbe-sensing and effector pathways  	pathway  
+TNFAIP3	Microbe-sensing and effector pathways  	pathway  
+LRRK2	Microbe-sensing and effector pathways  	pathway  
+LACC1	Microbe-sensing and effector pathways  	pathway  
+NCF4	Microbe-sensing and effector pathways  	pathway  
+NOS2	Microbe-sensing and effector pathways  	pathway  
+ATG16L1	Microbe-sensing and effector pathways  	pathway  
+TNF	Microbe-sensing and effector pathways  	pathway  
+IL-10	Microbe-sensing and effector pathways  	pathway  
+IL-1B	Microbe-sensing and effector pathways  	pathway  
+IL-18	Microbe-sensing and effector pathways  	pathway  
+IL-23	Microbe-sensing and effector pathways  	pathway  
+IL-12	Microbe-sensing and effector pathways  	pathway  
+C1ORF106	Intestinal barrier integrity   	pathway  
+RNF186	Intestinal barrier integrity   	pathway  
+AHR	Intestinal barrier integrity   	pathway  
+RSPO3	Intestinal barrier integrity   	pathway  
+HGFAC	Intestinal barrier integrity   	pathway  
+MST1	Intestinal barrier integrity   	pathway  
+HNF4A	Intestinal barrier integrity   	pathway  
+PLA2G4A	Intestinal barrier integrity   	pathway  
+PTGER4	Intestinal barrier integrity   	pathway  
+HLA	Adaptive Immunity    	pathway  
+PRDM1	Adaptive Immunity    	pathway  
+BACH2	Adaptive Immunity    	pathway  
+IL2RA	Adaptive Immunity    	pathway  
+RASGRP1	Adaptive Immunity    	pathway  
+CD28	Adaptive Immunity    	pathway  
+FCGR2A	Adaptive Immunity    	pathway  
+IFNG	Adaptive Immunity    	pathway  
+PTPN22	Adaptive Immunity    	pathway  
+STAT4	Adaptive Immunity    	pathway  
+IgG	Adaptive Immunity    	pathway  
+IgA	Adaptive Immunity    	pathway  
+IL-2	Adaptive Immunity    	pathway  
+IL-17	Adaptive Immunity    	pathway  
+IL-22	Adaptive Immunity    	pathway  
+Il-10	Adaptive Immunity    	pathway  
+OSM	Inflammation and fibrosis   	pathway  
+IAF	Inflammation and fibrosis   	pathway  
+TGFB	Inflammation and fibrosis   	pathway  
+IL-11	Inflammation and fibrosis   	pathway  
+IL6ST	Inflammation and fibrosis   	pathway  
+OSMR	Inflammation and fibrosis   	pathway  
+SMAD3	Inflammation and fibrosis   	pathway  
+TAB2	Inflammation and fibrosis   	pathway  
+ATG16L1	Cell-stress pathways    	pathway  
+TMEM258	Cell-stress pathways    	pathway  
+SDF2L1	Cell-stress pathways    	pathway  
+KEAP1	Cell-stress pathways    	pathway  
+IRGM	Cell-stress pathways    	pathway  
+RIPK1	Cell-stress pathways    	pathway  
+IL6ST	Cytokine networks    	pathway  
+IL12B	Cytokine networks    	pathway  
+IL23R	Cytokine networks    	pathway  
+TYK2	Cytokine networks    	pathway  
+RORC	Cytokine networks    	pathway  
+IL17RA	Cytokine networks    	pathway  
+TRAF3IP2	Cytokine networks    	pathway  
+CEBPB	Cytokine networks    	pathway  
+GPR65	Cytokine networks    	pathway  
+IL-23	Cytokine networks    	pathway  
+ILC3	Cytokine networks    	pathway  
+IL-17	Cytokine networks    	pathway  
+IL-22	Cytokine networks    	pathway  
+MEFV	Inflammasome signalling    	pathway  
+NLRP7	Inflammasome signalling    	pathway  
+NLRC4	Inflammasome signalling    	pathway  
+IL18RAP	Inflammasome signalling	pathway
