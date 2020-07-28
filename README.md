@@ -53,7 +53,8 @@ bash scripts/get_data.sh
 bash scripts/run_analysis.sh $PATH_TO_YOUR_DIRECTORY
 ```
 5. Figures and tables from the manuscript will be reproduced in `$PATH_TO_YOUR_DIRECTORY/results/manuscript_files` as follows:
-| File                       	| Description                                                                                                                    	|
+
+| File                       	| Description                                                                                                |
 |----------------------------	|--------------------------------------------------------------------------------------------------------------------------------	|
 | Fig.1.pdf                  	| Metabolomics analysis                                                                                                          	|
 | Fig.2.pdf                  	| Metabolite - Target connections based upon metabolomics analysis                                                               	|
