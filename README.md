@@ -20,14 +20,14 @@ The elaborated data and sample data from the HMP2 original [IBD study](https://d
 - Genetic association data are parsed from [GWAS catalog](https://www.ebi.ac.uk/gwas/)(as of July 14, 2020) and [OMIM](https://www.omim.org/) (as of May 28, 2020)
 
 ## Steps to reproduce the analysis:
-1. Clone the repository 
+1. Clone the repository, changing the argument `$PATH_TO_YOUR_DIRECTORY`
 ```
-git clone https://github.com/andreanuzzo/drug-discovery-from-metabolites.git path/to/working/dir
-cd path/to/working/dir
+git clone https://github.com/andreanuzzo/drug-discovery-from-metabolites.git $PATH_TO_YOUR_DIRECTORY
 ```
-2. Prepare the environment (in the same folder)
+2. Prepare the environment, changing the argument `$PATH_TO_YOUR_DIRECTORY`
 ```
 ## Note: requires  R <= 3.5.2 and Python => 3.6.0
+cd $PATH_TO_YOUR_DIRECTORY
 
 ## R packages
 RENV_VERSION=0.10.0-46
@@ -43,15 +43,16 @@ pip3 install -r requirements.txt
 deactivate
 ```
 
-3. Get data
+3. Get data, changing the argument `$PATH_TO_YOUR_DIRECTORY`
 ```
-bash scripts/get_data.sh
+bash scripts/get_data.sh $PATH_TO_YOUR_DIRECTORY
 ```
 
 4. Run the notebooks as follows, changing the argument `$PATH_TO_YOUR_DIRECTORY`
 ```
 bash scripts/run_analysis.sh $PATH_TO_YOUR_DIRECTORY
 ```
+
 5. Figures and tables from the manuscript will be reproduced in `$PATH_TO_YOUR_DIRECTORY/results/manuscript_files` as follows:
 
 | File                       	  | Description                                                                                                |
