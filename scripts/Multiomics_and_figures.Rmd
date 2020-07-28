@@ -74,7 +74,7 @@ hmdb_ref <- fread(file.path(basepath,'tmp/hmdb_ref_w_origin.csv'))
 #Load results
 metab_results <- fread(file.path(basepath,'results/summaries/master_mbx.tsv'))
 HMP2_metabs <- 
-  readxl::read_xlsx(file.path(basepath,'elaborated_data/Supplementary Tables 1-28.xlsx'), 
+  readxl::read_xlsx(file.path(basepath,'elaborated_data/2018-01-01078D-s6/Supplementary Tables 1-28.xlsx'), 
                     sheet=2) %>%
   left_join(metab_results %>% 
               select(Metabolites, HMP2_metab), 
@@ -371,7 +371,7 @@ hmdb_ref <- fread(file.path(basepath,'tmp/hmdb_ref_w_origin.csv'))
 
 
 HMP2_important_metabs <- 
-  readxl::read_xlsx(file.path(basepath,'elaborated_data/Supplementary Tables 1-28.xlsx'), 
+  readxl::read_xlsx(file.path(basepath,'elaborated_data/2018-01-01078D-s6/Supplementary Tables 1-28.xlsx'), 
                     sheet=2) %>%
   left_join(metab_results %>% 
               select(Metabolites, HMP2_metab), 
@@ -1684,7 +1684,7 @@ up.htx.df <- htx_results %>%
   group_by(diagnosis) %>% 
   mutate(in_this_study = case_when(padj<0.05~TRUE, TRUE~FALSE)) %>% 
   ungroup %>% 
-  full_join(readxl::read_xlsx(file.path(basepath,'elaborated_data/Supplementary Tables 31-33.xlsx'), sheet = 1) %>% 
+  full_join(readxl::read_xlsx(file.path(basepath,'elaborated_data/2018-01-01078D-s6/Supplementary Tables 31-33.xlsx'), sheet = 1) %>% 
                mutate(in_HMP2 = case_when(`FDR Pvalue`<0.05~TRUE,TRUE~FALSE)) %>% 
                select(hgncid=Gene, in_HMP2))  %>% 
   filter_at(vars(in_this_study, in_HMP2), any_vars(.!=FALSE)) %>% 
@@ -1875,7 +1875,7 @@ Sup2 <- target_prioritization %>%
             )
 
 HMP2_important_metabs <- 
-  readxl::read_xlsx('elaborated_data/Supplementary Tables 1-28.xlsx', sheet=16) %>%
+  readxl::read_xlsx('elaborated_data/2018-01-01078D-s6/Supplementary Tables 1-28.xlsx', sheet=16) %>%
   filter(`Minimum Q Value` <= 0.05) %>% 
   left_join(metab_results %>% 
               select(Metabolites, HMP2_metab), 
@@ -1929,7 +1929,7 @@ Sup2 %>%
 
 ```{r Sup3}
 HMP2_important_htx <- 
-  readxl::read_xlsx(file.path(basepath,'elaborated_data/Supplementary Tables 31-33.xlsx'), sheet = 1) %>% 
+  readxl::read_xlsx(file.path(basepath,'elaborated_data/2018-01-01078D-s6/Supplementary Tables 31-33.xlsx'), sheet = 1) %>% 
   group_by(Comparison) %>% 
   filter(`FDR Pvalue`<0.05) %>% 
   ungroup %>% 
