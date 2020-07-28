@@ -48,11 +48,10 @@ deactivate
 bash scripts/get_data.sh
 ```
 
-4. Run the notebooks as follows
+4. Run the notebooks as follows, changing the argument `$PATH_TO_YOUR_DIRECTORY`
 ```
-Rscript -e "rmarkdown::render('scripts/Metabolomics.Rmd',params=list(basepath = '$FULL_PATH_TO_YOUR_DIRECTORY'))"
-Rscript -e "rmarkdown::render('scripts/Host_transcriptomics.Rmd',params=list(basepath = '$FULL_PATH_TO_YOUR_DIRECTORY'))"
-Rscript -e "rmarkdown::render('scripts/Multiomics_and_figures.Rmd',params=list(basepath = '$FULL_PATH_TO_YOUR_DIRECTORY'))"
+bash scripts/run_analysis.sh $PATH_TO_YOUR_DIRECTORY
 ```
-5. All files will be ready in `$FULL_PATH_TO_YOUR_DIRECTORY/results/manuscript_files`
+5. Figures and tables from the manuscript will be reproduced in `$PATH_TO_YOUR_DIRECTORY/results/manuscript_files` as follows:
+  ** Fig.1 
 
