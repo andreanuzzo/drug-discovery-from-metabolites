@@ -1051,7 +1051,7 @@ bioMAP_plot <- readxl::read_xlsx(file.path(basepath, 'elaborated_data/Supplement
 bioMAP_plot
 ggsave(file.path(basepath,'results/manuscript_files/Fig5a.pdf'), device = 'pdf', width = 5, height = 10, units = 'in')
 file.copy(file.path(basepath, 'elaborated_data/Supplementary_Table5.xlsx'), 
-          file.path(basepath, 'results/manuscript_files/Supplementary_Table5.xlsx'))
+          file.path(basepath, 'results/manuscript_files/Supplementary_Table7.xlsx'))
 ```
 
 # Metabolomics results
@@ -2164,6 +2164,54 @@ target_prioritization %>%
   openxlsx::write.xlsx(file.path(basepath,'results/manuscript_files/Supplementary_Table6.xlsx'))
   
 ```
+
+# Supplementary Table 5
+```{r}
+openxlsx::read.xlsx(file.path(basepath,'results/manuscript_files/Supplementary_Table6.xlsx')) %>% 
+  group_by(Metabolites, diagnosis) %>% 
+  filter(n_distinct(sign(Metabolite.differential.concentration)) == 1) %>% 
+  ungroup %>% 
+  # filter(Metabolite.scoring>quantile(Metabolite.scoring,.75)) %>% 
+  filter(diagnosis=='CD') %>% 
+  group_by(Metabolites, Target) %>% 
+  summarize(`Score CD` = max(Metabolite.scoring), 
+            Modulation = paste0(unique(Modulation), collapse='; '),
+            `highest pxC50` = max(pxc50),
+            `Metabolite abundance CD`= unique(sign(Metabolite.differential.concentration)), 
+            `Metabolite abundance CD` = case_when(`Metabolite abundance CD`>0 ~'Enriched',
+                                                  `Metabolite abundance CD`<0 ~'Depleted'),
+            `Target expression CD`= unique(Target.differential.expression), 
+            `Target expression CD` = case_when(`Target expression CD`>0 ~'Enriched', 
+                                                `Target expression CD`<0 ~'Depleted')) %>% 
+  full_join(openxlsx::read.xlsx(file.path(basepath,'results/manuscript_files/Supplementary_Table6.xlsx')) %>% 
+              group_by(Metabolites, diagnosis) %>% 
+              filter(n_distinct(sign(Metabolite.differential.concentration)) == 1) %>% 
+              ungroup %>% 
+              # filter(Metabolite.scoring>quantile(Metabolite.scoring,.75)) %>% 
+              filter(diagnosis=='UC') %>% 
+              group_by(Metabolites, Target) %>% 
+              summarize(`Score UC` = max(Metabolite.scoring), 
+                        Modulation = paste0(unique(Modulation), collapse='; '),
+                        `highest pxC50` = max(pxc50),
+                        `Metabolite abundance UC`= unique(sign(Metabolite.differential.concentration)), 
+                        `Metabolite abundance UC` = case_when(`Metabolite abundance UC`>0 ~'Enriched',
+                                                              `Metabolite abundance UC`<0 ~'Depleted'),
+                        `Target expression UC`= unique(Target.differential.expression), 
+                        `Target expression UC` = case_when(`Target expression UC`>0 ~'Enriched', 
+                                                           `Target expression UC`<0 ~'Depleted'))) %>% 
+  left_join(openxlsx::read.xlsx(file.path(basepath,'results/manuscript_files/Supplementary_Table6.xlsx')) %>% 
+              group_by(Metabolites, diagnosis) %>% 
+              filter(n_distinct(sign(Metabolite.differential.concentration)) == 1) %>% 
+              ungroup %>% 
+              # filter(Metabolite.scoring>quantile(Metabolite.scoring,.75)) %>% 
+              group_by(Metabolites, Target) %>% 
+              summarize(analogs = paste0(unique(analog), collapse='; '))) %>% 
+  select(Metabolites, analogs, `highest pxC50`, Modulation, Target, everything()) %>% 
+  filter(Modulation != 'other')  %>% 
+  distinct_all  %>% 
+  openxlsx::write.xlsx(file.path(basepath,'results/manuscript_files/Supplementary_Table5.xlsx'))
+```
+
 
 ```{r}
 .basepath <- basepath
