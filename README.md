@@ -26,11 +26,11 @@ git clone https://github.com/andreanuzzo/drug-discovery-from-metabolites.git $PA
 ```
 2. Prepare the environment, changing the argument `$PATH_TO_YOUR_DIRECTORY`
 ```
-## Note: requires  R <= 3.5.2 and Python => 3.6.0
+## Note: requires  R <= 3.6.2 and Python => 3.6.0
 cd $PATH_TO_YOUR_DIRECTORY
 
 ## R packages
-RENV_VERSION=0.10.0-46
+RENV_VERSION=0.12.0
 R -e "install.packages('remotes', repos = c(CRAN = 'https://cloud.r-project.org'))"
 R -e "remotes::install_github('rstudio/renv@${RENV_VERSION}')"
 R -e 'renv::restore()'

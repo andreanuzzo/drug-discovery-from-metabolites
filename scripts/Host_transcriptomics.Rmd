@@ -22,7 +22,6 @@ knitr::knit_engines$set(python = reticulate::eng_python, cache=TRUE)
 
 library(DESeq2)
 library(BiocParallel)
-#register(MulticoreParam(8))
 library(data.table)
 library(tidyverse)
 library(janitor)
