@@ -2018,5 +2018,9 @@
       "Source": "Bioconductor",
       "Hash": "f7a31247eadfb45098bcf2e8c4aebb49"
     }
+  },
+  "Python": {
+    "Version": "3.7.3",
+    "Type": "virtualenv"
   }
 }
