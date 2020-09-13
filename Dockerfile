@@ -1,26 +1,15 @@
-# load base image
-FROM rocker/rstudio:3.6.2
 
-# Debian libraries
+FROM andreanuzzo/mmim:0.2
 
-ARG DEBIAN_FRONTEND=noninteractive
+CMD Rscript -e "installed.packages()" > /home/rstudio/MMIM/meh.tsv
 
-RUN apt-get update
+CMD python3 -m venv /home/rstudio/.venv && \
+	. /home/rstudio/.venv/bin/activate && \
+	pip3 install numpy==1.18.1 \
+		matplotlib==3.1.1 \
+		pandas==0.25.3 \
+		wheel && \
+	pip3 install -r home/rstudio/MMIM/requirements.txt && \
+	deactivate
 
-RUN apt-get install -y python3.6 python3-pip python3-venv libxml2-dev r-cran-devtools
-
-## packages
-
-COPY --chown=rstudio:rstudio renv.lock /home/rstudio/renv.lock
-COPY --chown=rstudio:rstudio requirements.txt /home/rstudio/requirements.txt
-
-ENV RENV_VERSION=0.12.0 
-
-RUN R -e "install.packages('remotes', repos = c(CRAN = 'https://cloud.r-project.org'))"
-RUN R -e "remotes::install_github('rstudio/renv@${RENV_VERSION}')"
-RUN R -e "renv::restore('/home/rstudio/')"
-
-
-RUN chmod 700 /home/rstudio/MMIM/scripts/get_data.sh
-
-CMD bash /home/rstudio/MMIM/scripts/get_data.sh /home/rstudio/MMIM
+CMD . /home/rstudio/.venv/bin/activate && which pip3 && pip3 list > /home/rstudio/MMIM/meh2.tsv
