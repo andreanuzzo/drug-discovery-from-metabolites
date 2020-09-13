@@ -1,7 +1,5 @@
 ---
 title: "Host Transcriptomics"
-params:
-  basepath: '../'
 output:
   html_document:
     fig_height: 7
@@ -14,7 +12,7 @@ editor_options:
   chunk_output_type: inline
 ---
 ```{r}
-project_folder <- params$basepath
+basepath <- dirname(getwd())
 
 knitr::opts_knit$set(root.dir=project_folder, dpi=720, cache=TRUE)
 knitr::opts_chunk$set(root.dir = project_folder, dpi=720, cache=TRUE)

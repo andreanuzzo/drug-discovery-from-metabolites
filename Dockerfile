@@ -1,15 +1,9 @@
+FROM andreanuzzo/mmim:0.3
 
-FROM andreanuzzo/mmim:0.2
+ENV PATH_TO_YOUR_DIRECTORY=/home/rstudio/MMIM
 
-CMD Rscript -e "installed.packages()" > /home/rstudio/MMIM/meh.tsv
+CMD chmod 700 /home/rstudio/MMIM/scripts/get_data.sh
 
-CMD python3 -m venv /home/rstudio/.venv && \
-	. /home/rstudio/.venv/bin/activate && \
-	pip3 install numpy==1.18.1 \
-		matplotlib==3.1.1 \
-		pandas==0.25.3 \
-		wheel && \
-	pip3 install -r home/rstudio/MMIM/requirements.txt && \
-	deactivate
+CMD sh /home/rstudio/MMIM/scripts/get_data.sh /home/rstudio/MMIM
 
-CMD . /home/rstudio/.venv/bin/activate && which pip3 && pip3 list > /home/rstudio/MMIM/meh2.tsv
+CMD sh /home/rstudio/MMIM/scripts/run_analysis.sh $PATH_TO_YOUR_DIRECTORY
