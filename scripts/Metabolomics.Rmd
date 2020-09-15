@@ -12,7 +12,7 @@ editor_options:
   chunk_output_type: inline
 ---
 ```{r}
-basepath <- dirname(getwd())
+basepath <- #dirname(getwd())
 ```
 
 ```{r setup, warning=FALSE, message=FALSE}

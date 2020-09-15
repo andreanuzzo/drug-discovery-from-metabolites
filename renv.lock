@@ -395,10 +395,10 @@
     },
     "arsenal": {
       "Package": "arsenal",
-      "Version": "3.5.0",
+      "Version": "3.4.0",
       "Source": "Repository",
       "Repository": "CRAN",
-      "Hash": "5575aa4e136fc70a9b7a5bbdd3e6b371"
+      "Hash": "ab03f9914f17595a371c27397299e961"
     },
     "askpass": {
       "Package": "askpass",
@@ -653,10 +653,10 @@
     },
     "data.table": {
       "Package": "data.table",
-      "Version": "1.13.0",
+      "Version": "1.12.8",
       "Source": "Repository",
       "Repository": "CRAN",
-      "Hash": "06d5863292e2e8ffbb063ce34e77bb2a"
+      "Hash": "cd711af60c47207a776213a368626369"
     },
     "dbplyr": {
       "Package": "dbplyr",
