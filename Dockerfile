@@ -1,6 +1,6 @@
 
 # load base image
-FROM rocker/rstudio:3.6.2
+FROM rocker/rstudio:3.6.3
 
 # Debian libraries
 
@@ -8,7 +8,7 @@ ARG DEBIAN_FRONTEND=noninteractive
 
 RUN apt-get update
 
-RUN apt-get install -y python3.6 python3-pip python3-venv libxml2-dev r-cran-devtools
+RUN apt-get install -y python3.6 python3-pip python3-venv libxml2-dev
 
 WORKDIR /home/rstudio
 
@@ -38,7 +38,7 @@ RUN R -e "install.packages('remotes', repos = c(CRAN = 'https://cloud.r-project.
 RUN R -e "remotes::install_github('rstudio/renv@${RENV_VERSION}')"
 RUN R -e "renv::restore('/home/rstudio/')"
 
-#ENV PATH_TO_YOUR_DIRECTORY=/home/rstudio/MMIM
+ENV PATH_TO_YOUR_DIRECTORY=/home/rstudio/MMIM
 
-#CMD sh /home/rstudio/MMIM/scripts/get_data.sh $PATH_TO_YOUR_DIRECTORY && \ 
-#	sh /home/rstudio/MMIM/scripts/run_analysis.sh $PATH_TO_YOUR_DIRECTORY
+CMD #sh /home/rstudio/MMIM/scripts/get_data.sh $PATH_TO_YOUR_DIRECTORY && \ 
+CMD sh /home/rstudio/MMIM/scripts/run_analysis.sh $PATH_TO_YOUR_DIRECTORY

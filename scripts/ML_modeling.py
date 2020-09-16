@@ -183,10 +183,9 @@ def ML_predict_best(X_train, X_test, y_train, y_test, best_model, tune=False, cv
     pickle.dump(loaded_model, 
                 open(os.path.join(wdir, os.pardir, 
                 'tmp/ML/{}_optimized.sav'.\
-                  format(best_model.split('.')[0].lstrip(os.path.join(wdir, os.pardir,'tmp/ML/'))
-                  )), 
-                    'wb')
-                )
+                  format(best_model.split('.')[0].split('/')[-1])
+                ),'wb')
+              )
     
   else:
     log.append('Predictions from chosen model ({})'.format(best_model))

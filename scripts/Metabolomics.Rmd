@@ -12,7 +12,7 @@ editor_options:
   chunk_output_type: inline
 ---
 ```{r}
-basepath <- #dirname(getwd())
+basepath <- dirname(getwd())
 ```
 
 ```{r setup, warning=FALSE, message=FALSE}
@@ -54,9 +54,9 @@ sample_data <- fread(file.path(basepath,'raw_data/hmp2_metadata.csv')) %>%
   clean_names %>% 
   mutate(diagnosis=factor(diagnosis, levels = c('nonIBD','UC','CD'), ordered = TRUE))
 
-sample_data %>% 
-  tableby(diagnosis ~ participant_id + site_name + sex + consent_age + antibiotics + data_type, 
-          data=.) %>% 
+sample_data %>%
+  tableby(diagnosis ~ participant_id + site_name + sex + consent_age + antibiotics + data_type,
+          data=.) %>%
   summary
 
 ```
@@ -73,8 +73,8 @@ sample_data_elaborated <- sample_data %>%
   filter(data_type %in% c('host_transcriptomics','metabolomics','metagenomics')) %>% 
   filter(!grepl('_P', participant_id))
   
-sample_data_elaborated %>%  
-  tableby(diagnosis~week_num, strata=participant_id, data=.) %>% 
+sample_data_elaborated %>%
+  tableby(diagnosis~week_num, strata=participant_id, data=.) %>%
   summary
 
 ```
@@ -314,7 +314,7 @@ dabest_results  <-
          paired = FALSE)
 #plot(dabest_results, color.column=site_name)
 
-#write_csv(results, file.path(basepath,'results/dbmwu_results.csv'))
+write_csv(results, file.path(basepath,'results/dbmwu_results.csv'))
 ```
 
 # Machine Learning models
@@ -504,9 +504,9 @@ cm$table %>%
 ML_explain(best_model='tmp/ML/mbx_XGB_optimized.sav', 
            X_test = train_obj[[2]], 
            category = r_to_py(diagnosis_v), 
-           savename='mbx', tune=FALSE)
+           savename='mbx', tune=TRUE)
 
-fread(file.path(basepath,'results/ML/mbx__XGB_optimized_shapi.csv')) %>%
+fread(file.path(basepath,'results/ML/mbx_XGB_optimized_shapi.csv')) %>%
   rowwise() %>% 
   mutate(wt = sum(nonIBD, UC, CD)) %>%
   ungroup %>% 
