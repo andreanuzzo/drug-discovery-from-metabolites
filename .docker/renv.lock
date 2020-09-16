@@ -240,6 +240,12 @@
       "Repository": "CRAN",
       "Hash": "40a55bd0b44719941d103291ac5e9d74"
     },
+    "R.utils": {
+      "Package": "R.utils",
+      "Version": "2.9.2",
+      "Source": "Repository",
+      "Repository": "CRAN"
+    },
     "R6": {
       "Package": "R6",
       "Version": "2.4.1",
@@ -771,7 +777,7 @@
     },
     "fpc": {
       "Package": "fpc",
-      "Version": "2.2-7",
+      "Version": "2.2-5",
       "Source": "Repository",
       "Repository": "CRAN",
       "Hash": "60b56e418552b280f02cf7c232b9c1ef"
@@ -1637,7 +1643,7 @@
     },
     "rmarkdown": {
       "Package": "rmarkdown",
-      "Version": "2.3",
+      "Version": "2.1",
       "Source": "Repository",
       "Repository": "CRAN",
       "Hash": "202260e1b2c410edc086d5b8f1ed946e"
@@ -1763,7 +1769,7 @@
     },
     "survival": {
       "Package": "survival",
-      "Version": "3.2-3",
+      "Version": "3.1-12",
       "Source": "Repository",
       "Repository": "CRAN",
       "Hash": "3cc6154c577a82f06250254db30a4bfb"
