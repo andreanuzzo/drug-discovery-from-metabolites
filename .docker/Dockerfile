@@ -40,5 +40,5 @@ RUN R -e "renv::restore('/home/rstudio/')"
 
 ENV PATH_TO_YOUR_DIRECTORY=/home/rstudio/MMIM
 
-CMD #sh /home/rstudio/MMIM/scripts/get_data.sh $PATH_TO_YOUR_DIRECTORY && \ 
-CMD sh /home/rstudio/MMIM/scripts/run_analysis.sh $PATH_TO_YOUR_DIRECTORY
+CMD sh /home/rstudio/MMIM/scripts/get_data.sh $PATH_TO_YOUR_DIRECTORY && \ 
+	sh /home/rstudio/MMIM/scripts/run_analysis.sh $PATH_TO_YOUR_DIRECTORY
