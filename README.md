@@ -25,6 +25,16 @@ The elaborated data and sample data from the HMP2 original [IBD study](https://d
 git clone https://github.com/andreanuzzo/drug-discovery-from-metabolites.git $PATH_TO_YOUR_DIRECTORY
 ```
 ### 2. Run the code
+```
+cd $PATH_TO_YOUR_DIRECTORY
+
+docker run \
+-v "$(pwd):/home/rstudio/MMIM" \
+-e DISABLE_AUTH=true \
+-e ROOT=TRUE \
+-p 8787:8787 \
+--rm andreanuzzo/mmim
+```
 
 #### 2.1. Docker 
 If you have docker, you can easily run the script as follows, without doing any installation. The docker is baised on [rocker/rstudio:3.6](https://www.rocker-project.org) and contains all the packages for installation. You can run the code as follows.
