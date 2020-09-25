@@ -40,7 +40,7 @@ docker run \
 -e DISABLE_AUTH=true \
 -e ROOT=TRUE \
 -p 8787:8787 \
---rm andreanuzzo/mmim
+--rm andreanuzzo/mmim:0.8
 ```
 
 
