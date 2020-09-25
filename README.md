@@ -1,5 +1,5 @@
 # Expanding the drug discovery space
-This is the code repository for the paper `blabla`
+This is the code repository for the paper `Expanding the drug discovery space with predicted metabolite-target interactions` by Nuzzo, A. et al. 
 
 The aim of this project is to determine novel targets for Inflammatory Bowel Disease (IBD), i.e. Crohn's disease (CD) and/or Ulcerative Colitis (UC) from publicly available microbiome raw_data. The iHMP project (NIDDK U54DE023798) is conducted by several institutions, including Broad Institute and Stanford University. 
 
@@ -20,11 +20,21 @@ The elaborated data and sample data from the HMP2 original [IBD study](https://d
 - Genetic association data are parsed from [GWAS catalog](https://www.ebi.ac.uk/gwas/)(as of July 14, 2020) and [OMIM](https://www.omim.org/) (as of May 28, 2020)
 
 ## Steps to reproduce the analysis:
-1. Clone the repository, changing the argument `$PATH_TO_YOUR_DIRECTORY`
+### 1. Clone the repository, changing the argument `$PATH_TO_YOUR_DIRECTORY`
 ```
 git clone https://github.com/andreanuzzo/drug-discovery-from-metabolites.git $PATH_TO_YOUR_DIRECTORY
 ```
-2. Prepare the environment, changing the argument `$PATH_TO_YOUR_DIRECTORY`
+### 2. Run the code
+
+#### 2.1. Docker 
+If you have docker, you can easily run the script as follows, without doing any installation. The docker is baised on [rocker/rstudio:3.6](https://www.rocker-project.org) and contains all the packages for installation. You can run the code as follows.
+```
+```
+
+#### 2.2. Local computer 
+If you don't want to use docker, follow the next steps to run the code locally. You will need to have Python, RStudio and virtual environments pre-installed.
+
+Prepare the environment, changing the argument `$PATH_TO_YOUR_DIRECTORY`
 ```
 ## Note: requires  R <= 3.6.2 and Python => 3.6.0
 cd $PATH_TO_YOUR_DIRECTORY
@@ -43,17 +53,17 @@ pip3 install -r requirements.txt
 deactivate
 ```
 
-3. Get data, changing the argument `$PATH_TO_YOUR_DIRECTORY`
+Get data, changing the argument `$PATH_TO_YOUR_DIRECTORY`
 ```
 bash scripts/get_data.sh $PATH_TO_YOUR_DIRECTORY
 ```
 
-4. Run the notebooks as follows, changing the argument `$PATH_TO_YOUR_DIRECTORY`
+Run the notebooks as follows, changing the argument `$PATH_TO_YOUR_DIRECTORY`
 ```
 bash scripts/run_analysis.sh $PATH_TO_YOUR_DIRECTORY
 ```
-
-5. Figures and tables from the manuscript will be reproduced in `$PATH_TO_YOUR_DIRECTORY/results/manuscript_files` as follows:
+### 3. Output
+Regardless of the way you choose to run the code, figures and tables from the manuscript should be reproduced in `$PATH_TO_YOUR_DIRECTORY/results/manuscript_files` as follows:
 
 | File                       	  | Description                                                                                                |
 |-------------------------------|--------------------------------------------------------------------------------------------------------------------------------	|
