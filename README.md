@@ -31,7 +31,7 @@ git clone https://github.com/andreanuzzo/drug-discovery-from-metabolites.git $PA
 ### 2. Run the code
 
 #### 2.1. Docker 
-If you have docker, you can easily run the script as follows, without doing any installation. The docker is baised on [rocker/rstudio:3.6](https://www.rocker-project.org) and contains all the packages for installation. You can run the code as follows.
+If you have docker, you can easily run the script as follows, without doing any installation. The docker is based on [rocker/rstudio:3.6](https://www.rocker-project.org) and contains all the packages for installation. You can run the code as follows.
 ```
 cd $PATH_TO_YOUR_DIRECTORY
 
