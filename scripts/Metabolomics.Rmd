@@ -112,9 +112,9 @@ write_csv(sample_data_elaborated, file.path(basepath,'elaborated_data/HMP2_sampl
 There are no technical replicates in the data. Since we are talking about metabolomics spectral peaks, we will proceed as follows:
   - group the area by LC/MS method/column per sample
   - compute the ratio between each peak area and the total
-  - multiply the ratio to 1e6 to obtain the ppm
-  - normalize with ~centered log-ratio~ transformation
-After that, outliers will be filtered out from the samples via PCA analysis
+  - normalize with ~isometric log-ratio~ transformation
+  
+After that, outliers will be filtered out from the samples via PCA analysis. We noticed that some metabolite names presented typos (i.e. `lithocolate` vs `lithocholate`), so we harmonized them as well by taking the mean of their values. 
 
 ```{r, warning=FALSE}
 #
