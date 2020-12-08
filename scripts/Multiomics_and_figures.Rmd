@@ -2001,6 +2001,7 @@ Sup3 %>%
 
 Sup3 %>% 
   ungroup %>% 
+  left_join(select(t_classes, Targets = hgncid, targetclass)) %>% 
   type_convert() %>% 
   mutate(Targets = case_when(Targets %in% HMP2_important_htx ~ paste0(Targets,footnote_marker_number('†')),
                             TRUE~ Targets))%>% 
