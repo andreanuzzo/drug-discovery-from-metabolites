@@ -11,8 +11,8 @@ The repository contains:
 
 ## Data
 The elaborated data and sample data from the HMP2 original [IBD study](https://doi.org/10.1038/s41586-019-1237-9) are hosted by the [IBDMDB portal](https://ibdmdb.org).
-- The LC/MS spectra for the metabolomics analyses are also available, but here we will work on the pre-processed metabolite abundances computed using the [MetaboAnalyst 2](https://doi.org/10.3390/metabo9030057) software against the [HMDB](https://doi.org/10.1093/nar/gkx1089) raw_database.
-- The host transcriptomics data are obtained via bulk RNASeq from biopsies of patients in different location of the intestines. The Transcripts were aligned to hg19 using topHat 2.0.14 and resolved to counts with htseq-count 0.6.1. Here again we'll work with the pre-processed tables.
+- The LC/MS spectra for the metabolomics analyses are also available, but here we will work on the pre-processed metabolite abundances computed using the [MetaboAnalyst 2](https://doi.org/10.3390/metabo9030057) software against the [HMDB](https://doi.org/10.1093/nar/gkx1089) raw_database. Original HMP2 protocol is available [here](https://www.ibdmdb.org/cb/document/Data%20Generation%20Protocols/MetabolomicsHMP2Protocol.pdf).
+- The host transcriptomics data are obtained via bulk RNASeq from biopsies of patients in different location of the intestines. The Transcripts were aligned to hg19 using topHat 2.0.14 and resolved to counts with htseq-count 0.6.1. Here again we'll work with the pre-processed tables.Original HMP2 protocol is available [here](https://www.ibdmdb.org/cb/document/Data%20Generation%20Protocols/Host_Transcriptomics_HMP2_protocol.pdf).
 
 ## Databases:
 - Metabolites annotation is parsed from the [HMDB database](https://hmdb.ca) (as of May 2020)
