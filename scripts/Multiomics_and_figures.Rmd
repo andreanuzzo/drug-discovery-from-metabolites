@@ -49,18 +49,15 @@ library(uwot)
 
 select <- dplyr::select
 
-studycolors = c(
-  '#4669bd', 
-  'CD' = '#c25572',
-  'UC' = '#ff9706',
-  'nonIBD' = '#81c404',
-  'ChEMBL'="#3c8c94", #Chembl
-   'Enrichment analysis'='#f4e218', #Enrichment
-   'GWAS'='#fb8072',
-   'Negative' = 'firebrick4',
-   'Positive' = 'steelblue', 
-   'other' = 'black'
-)
+studycolors = c('CD' = '#c25572',
+                'UC' = '#ff9706',
+                'nonIBD' = '#00a1d5ff',
+                'ChEMBL'="#374e55ff",
+                'Enrichment analysis'='#f4e218',
+                'GWAS'='#fb8072',
+                'Negative' = 'firebrick4',
+                'Positive' = 'steelblue', 
+                'other' = 'black')
 ```
 
 # Metabolomics HMP2 study comparison
@@ -248,7 +245,7 @@ consensus.hmp2.sig <- HMP2_metabs %>%
   xlab('FDR-adjusted p-value in original HMP2 study')+
   theme_minimal() + 
   scale_color_manual(values = studycolors)+
-  geom_smooth(method = 'gam')+
+  geom_smooth(method = 'lm')+
   theme(legend.position='none')+
   stat_cor(method = 'spearman',
           label.y = 1)
@@ -272,7 +269,7 @@ consensus.hmp2.ab <- HMP2_metabs %>%
   xlab('Differential Abundance in original HMP2 study')+
   theme_minimal() + 
   scale_color_manual(values = studycolors)+
-  geom_smooth(method = 'gam')+
+  geom_smooth(method = 'lm')+
   theme(legend.position='none')+
   stat_cor(method = 'spearman',
           label.y = 2)
@@ -328,14 +325,11 @@ chembl_similars <- fread(file.path(basepath,'elaborated_data/CHEMBL25.CFP.csv.gz
 
 
 chembl_assays<-fread(file.path(basepath,'elaborated_data/Chembl_f_assays_BIOME.csv')) %>% 
-  # bind_rows(fread(file.path(basepath,'elaborated_data/Chembl_assays_BioMAP_BIOME.csv'))) %>% 
   mutate(association='ChEMBL') %>% 
   drop_na() %>% 
   mutate(type = case_when(
     grepl('EC|AC|activation|\\bagonist\\b', standard_type, ignore.case=T) ~ 'Positive',
     grepl('IC|Ki|inhibition|antagonist', standard_type, ignore.case=T) ~ 'Negative',
-    # grepl('antagonist', assay_description, ignore.case = T) ~ 'Antagonist',
-    # grepl('\\b[A,a]gonist\\b',assay_description) ~ 'Agonist',
     is.na(standard_type) ~ NA_character_,
     TRUE ~ 'other')) %>% 
   select(analog=compound_chembl_id, 
@@ -449,7 +443,7 @@ mets.hist <- pri.met %>%
   coord_flip()+
   facet_grid(type~., scales = 'free', space = 'free')+
   theme_minimal()+
-  scale_fill_tableau('Tableau 20', na.value='grey')+
+  scale_fill_tableau('Color Blind', na.value='bisque3')+
   guides(fill=guide_legend(ncol=1, title = 'Target classes'))+
   theme(legend.position = 'left')+
   labs(x='Metabolite class', y = 'Number of connected targets per interaction type')
@@ -468,7 +462,7 @@ met.alluv <-  pri.met %>%
   select(super_class, type, targetclass) %>% 
   alluvial_wide(stratum_label_size = 3,
                 order_levels = c('other','Positive','Negative'), 
-                col_vector_flow = c(tableau_color_pal('Tableau 20')(length(unique(pri.met$targetclass))-1), 
+                col_vector_flow = c(tableau_color_pal('Color Blind')(length(unique(pri.met$targetclass))-1), 
                                     'grey'), 
                 stratum_labels = F, 
                 fill_by = 'last_variable') +
@@ -579,7 +573,7 @@ samples.umap.biopsy <- t(cts) %>%
   theme(panel.border=element_blank(), 
         legend.background=element_blank())+
   guides(alpha='none')+
-  scale_color_tableau() + 
+  scale_color_tableau('Color Blind') + 
   xlab('UMAP 1') + ylab('UMAP 2')
 
 ```
@@ -660,7 +654,7 @@ mbx.htx.data <- target_prioritization %>%
   distinct_all %>% 
   rename(Targets=hgncid) %>% 
   group_by(Metabolites, Targets, type) %>% 
-  filter(pxc50 == max(pxc50)) %>% glimpse
+  filter(pxc50 == max(pxc50))
 
 label_data <- 
   mbx.htx.data %>% 
@@ -1019,25 +1013,29 @@ ggsave(file.path(basepath,'results/manuscript_files/Fig4.pdf'), device = 'pdf', 
 # BioMAP
 ## Fig 5
 ```{r BioMAP, fig.width=5, fig.height=9}
-bioMAP_plot <- readxl::read_xlsx(file.path(basepath, 'elaborated_data/Supplementary_Table5.xlsx'),sheet = 1) %>% 
+bioMAP_plot <- readxl::read_xlsx(file.path(basepath, 'elaborated_data/BioMap_results.xlsx'),sheet = 1) %>% 
   group_by(metabolite, assay_name_required) %>%
   arrange(concentration_molar) %>% 
   mutate(conc_levels = log1p(1000*as.numeric(concentration_molar))) %>% 
   ungroup %>% 
   arrange(metabolite, conc_levels, bio_marker_name_s_required) %>% 
+  filter(system_name_required %in% c('BT', 'CASM3C','HDF3CGF'), 
+         metabolite %in% c('Butyric acid', 'Niacin', 'alpha-CEHC', 'Oleanolic acid')) %>% 
   mutate(metabolite = str_replace(metabolite, 'Butyric acid', 'Butyrate'),
          metabolite=factor(metabolite, 
                            levels=c('Butyrate', 'Niacin', 
                                     'alpha-CEHC', 'Oleanolic acid'), 
                            ordered = T)) %>% 
-  filter(system_name_required %in% c('BT', 'CASM3C','HDF3CGF')) %>% 
   ggplot()+
   aes(y=log_ratio_required, x=bio_marker_name_s_required)+
   facet_grid(metabolite~system_name_required, scales = 'free', space = 'free_x')+
   theme_minimal()+
-  geom_ribbon(aes(ymin=-significance_prediction_envelope_at_95_percent, ymax=significance_prediction_envelope_at_95_percent), group=1, alpha=0.2) +
+  geom_ribbon(aes(ymin=-significance_prediction_envelope_at_95_percent, 
+                  ymax=significance_prediction_envelope_at_95_percent), 
+              group=1, alpha=0.2) +
   geom_line(aes(color=conc_levels, group=concentration_molar), alpha=.8) +
-  scale_color_gradient2_tableau(name='Metabolite\nconcentration\n(log mM)')+
+  scale_colour_gradient2_tableau('Green-Blue Diverging',
+                                 name='Metabolite\nconcentration\n(log mM)')+
   theme(axis.text.x = element_text(angle=90, size = 8, vjust = .8), 
         legend.text = element_text(angle=45, size = 8, hjust = 1), 
         legend.position = 'bottom',
@@ -1048,7 +1046,7 @@ bioMAP_plot <- readxl::read_xlsx(file.path(basepath, 'elaborated_data/Supplement
 
 bioMAP_plot
 ggsave(file.path(basepath,'results/manuscript_files/Fig5a.pdf'), device = 'pdf', width = 5, height = 10, units = 'in')
-file.copy(file.path(basepath, 'elaborated_data/Supplementary_Table5.xlsx'), 
+file.copy(file.path(basepath, 'elaborated_data/BioMap_results.xlsx'), 
           file.path(basepath, 'results/manuscript_files/Supplementary_Table7.xlsx'))
 ```
 
@@ -1090,7 +1088,7 @@ xgb.cm <- cm$table %>%
   ggplot(aes(x=Reference, y=Prediction, fill=value)) + 
   geom_tile()+
   theme_minimal()+
-  scale_fill_gradient(low='white',high=studycolors[1])+
+  scale_fill_gradient(low='white',high='#003c67ff')+
   xlab("True")+
   ylab("Predicted")+
   theme(axis.text.x=element_text(angle=45,hjust=1,vjust=1),
@@ -1103,7 +1101,7 @@ xgb.fi <- fread(file.path(basepath,'results/ML/mbx_XGB_fi.csv')) %>%
   ggplot(aes(x=reorder(features, percentage), 
              y=percentage))+
   geom_histogram(stat = 'identity', 
-                 fill = studycolors[1])+
+                 fill = '#003c67ff')+
   ylab('Feature importance')+
   scale_y_continuous(labels = scales::percent_format(scale = 1e2, accuracy = .1))+
   xlab('')+
@@ -1151,7 +1149,7 @@ gmml.cm <- cm2$table %>%
   ggplot(aes(x=Reference, y=Prediction, fill=value)) + 
   geom_tile()+
   theme_minimal()+
-  scale_fill_gradient(low='white',high=studycolors[1])+
+  scale_fill_gradient(low='white',high='#003c67ff')+
   xlab("True")+
   ylab("Predicted")+
   theme(axis.text.x=element_text(angle=45,hjust=1,vjust=1),
@@ -1164,7 +1162,7 @@ gmml.fi <- fread(file.path(basepath,'results/GMML/mbx_gmme_XGBClassifier_fi.csv'
   ggplot(aes(x=reorder(features, percentage), 
              y=percentage))+
   geom_histogram(stat = 'identity', 
-                 fill = studycolors[1])+
+                 fill = '#003c67ff')+
   ylab('Feature importance')+
   scale_y_continuous(labels = scales::percent_format(scale = 1e2, accuracy = .1))+
   xlab('')+
@@ -1203,7 +1201,7 @@ gmml.me.cm <- cm3$table %>%
   ggplot(aes(x=Reference, y=Prediction, fill=value)) + 
   geom_tile()+
   theme_minimal()+
-  scale_fill_gradient(low='white',high=studycolors[1])+
+  scale_fill_gradient(low='white',high='#003c67ff')+
   xlab("True")+
   ylab("Predicted")+
   theme(axis.text.x=element_text(angle=45,hjust=1,vjust=1),
@@ -1216,7 +1214,7 @@ gmml.me.fi <- fread(file.path(basepath,'results/GMML/mbx_gmme_meXGBClassifier_fi
   ggplot(aes(x=reorder(features, percentage), 
              y=percentage))+
   geom_histogram(stat = 'identity', 
-                 fill = studycolors[1])+
+                 fill = '#003c67ff')+
   ylab('Feature importance')+
   scale_y_continuous(labels = scales::percent_format(scale = 1e2,accuracy = .1))+
   xlab('')+
@@ -1407,7 +1405,7 @@ importances.plot <- fread(file.path(basepath,'results/summaries/mwu_summaries.cs
   theme_minimal() + 
   coord_flip() + 
   scale_color_manual(values = studycolors, 
-                     na.value=studycolors[1])+
+                     na.value='#003c67ff')+
   scale_x_discrete(labels = c(~ atop(paste("MannWithney U"), 
                                      paste('log(', italic("q"), 
                                            '-value)')),
@@ -1787,7 +1785,7 @@ ggsave(file.path(basepath,'results/manuscript_files/FigS4.pdf'), device = 'pdf',
 
 ```
 
-# Fig S5
+## Fig S5
 ```{r eval=FALSE}
 # Note: Figure 4 and S5 are made via Cytoscape 3.8.0
 
@@ -1804,24 +1802,20 @@ fg %>%
 
 ## Fig S6
 ```{r, fig.width=15, fig.height=9}
-bioMAP_plot <- readxl::read_xlsx(file.path(basepath, 'elaborated_data/Supplementary_Table5.xlsx'),sheet = 1) %>% 
+bioMAP_plot <- readxl::read_xlsx(file.path(basepath, 'elaborated_data/BioMap_results.xlsx'),sheet = 1) %>% 
   group_by(metabolite, assay_name_required) %>%
   arrange(concentration_molar) %>% 
   mutate(conc_levels = log1p(1000*as.numeric(concentration_molar))) %>% 
   ungroup %>% 
   arrange(metabolite, conc_levels, bio_marker_name_s_required) %>% 
-  mutate(metabolite = str_replace(metabolite, 'Butyric acid', 'Butyrate'),
-         metabolite=factor(metabolite, 
-                           levels=c('Butyrate', 'Niacin', 
-                                    'alpha-CEHC', 'Oleanolic acid'), 
-                           ordered = T)) %>% 
+  mutate(metabolite = str_replace(metabolite, 'Butyric acid', 'Butyrate')) %>% 
   ggplot()+
   aes(y=log_ratio_required, x=bio_marker_name_s_required)+
   facet_grid(metabolite~system_name_required, scales = 'free', space = 'free_x')+
   theme_minimal()+
   geom_ribbon(aes(ymin=-significance_prediction_envelope_at_95_percent, ymax=significance_prediction_envelope_at_95_percent), group=1, alpha=0.2) +
   geom_line(aes(color=conc_levels, group=concentration_molar), alpha=.8) +
-  scale_color_gradient2_tableau(name='Metabolite\nconcentration\n(log mM)')+
+  scale_color_gradient2_tableau('Green-Blue Diverging', name='Metabolite\nconcentration\n(log mM)')+
   theme(axis.text.x = element_text(angle=90, size = 8, vjust = .8), 
         legend.text = element_text(angle=45, size = 8, hjust = 1), 
         legend.position = 'bottom',
@@ -1830,10 +1824,8 @@ bioMAP_plot <- readxl::read_xlsx(file.path(basepath, 'elaborated_data/Supplement
   xlab('Biomarkers')
 
 bioMAP_plot
-ggsave(file.path(basepath,'results/manuscript_files/FigS6.pdf'), device = 'pdf', width = 15, height = 10, units = 'in')
+ggsave(file.path(basepath,'results/manuscript_files/FigS6.pdf'), device = 'pdf', width = 15, height = 18, units = 'in')
 ```
-
-
 
 # Supplementary Table 2
 
@@ -2043,47 +2035,40 @@ Sup4 <-   omim.table%>%
   distinct(SNPS, Metabolites, MWU_delta, ranking, .keep_all = T) %>% 
   mutate(Metabolites = case_when(Metabolites %in% Sup2$Metabolites ~ paste0(Metabolites,footnote_marker_number('◊', "html")),
                             TRUE~ Metabolites),
-         GWAS = paste0(unique(`DISEASE/TRAIT`), collapse = '; '),
-         variant=paste0(unique(paste0(SNPS, ' (',CONTEXT,')')), collapse = '; '),
-         `∆expr` = mean(log2FoldChange, na.rm=T), 
-         qval = mean(padj, na.rm=T), 
-         `Enriched Pathways` = paste0(unique(Pathway), collapse='; '), 
-         Metabolites = paste0(unique(paste0(Metabolites, 
-                              #', ∆ab=', round(MWU_delta, 3), ', ranking=', round(ranking, 3),
-                              ', ', candidates, 
-                              ', (pxc50 = ', pxc50, ')')), 
-                              collapse='; ')
-  ) 
+         variant=paste0(unique(paste0(SNPS, ' (',CONTEXT,')')), collapse = '; '))
+   
 
 
 Sup4 %>% 
   ungroup %>% 
   readr::type_convert() %>% 
   arrange(hgncid, Metabolites) %>% 
-  mutate(variant = str_replace_all(variant,'_', ' ')) %>%
-  select(hgncid, `Genetic association` = `DISEASE/TRAIT`,
-         Variant = SNPS, 
-         `GWAS p-value`=`P-VALUE`, PUBMEDID, 
-         `Manual pathway curation`=action, 
-         `Additional pathway evidence`=action,
-         `∆expr`, qval, `Enriched Pathways`, 
-         diagnosis, Metabolites) %>% 
-  mutate(hgncid = case_when(hgncid %in% Sup3$Targets ~ paste0(hgncid,footnote_marker_number('§')),
-                            TRUE~ hgncid)) %>%
-  dplyr::rename(Target=hgncid) %>% 
-  cSplit('Metabolites', 'long', sep = '; ') %>% 
-  cSplit('Enriched Pathways', 'long', sep = '; ') %>% 
-  distinct_all()  %>% 
-  cSplit('Metabolites','; ','long') %>% 
-  separate(Metabolites, c('Metabolites','Tentative classification','pxC50'), sep = ', ') %>% 
-  mutate(pxC50 = str_replace_all(pxC50, '\\(pxc50 = ', ''),
-         pxC50 = str_replace_all(pxC50, '\\)', ''),
-         `∆expr` = case_when(`∆expr`>0~'Upregulated',`∆expr`<0~'Downregulated',TRUE~NA_character_)) %>% 
+  mutate(Target = case_when(hgncid %in% Sup3$Targets ~ paste0(hgncid,footnote_marker_number('§', "html")),
+                            TRUE~ hgncid), 
+         variant = str_replace_all(variant,'_', ' '), 
+         `Direction of modulation` = str_split(candidates, ' ', simplify=T)[1], 
+         `Metabolite abundance` = case_when(MWU_delta > 0 ~ 'Enriched', 
+                                            MWU_delta < 0 ~ 'Depleted')) %>% 
+  cSplit('variant',';','long') %>% 
+  select(Target, 
+         `Genetic association` = `DISEASE/TRAIT`,
+         Variant = variant, 
+         `GWAS p-value` = `P-VALUE`,
+         PUBMEDID, 
+         `Additional pathway evidence` = action, 
+         `∆expr` = log2FoldChange,
+         qval = padj, 
+         `Enriched pathways` = Pathway, 
+         diagnosis, 
+         Metabolites, 
+         `Direction of modulation`, 
+         `Metabolite abundance`, 
+         pxc50) %>% 
+    distinct_all %>% 
   openxlsx::write.xlsx(file.path(basepath,'results/manuscript_files/Supplementary_Table4.xlsx'))
 ```
 
-# Table 2
-# Supplementary Table 5
+# Table2
 
 ```{r}
 Sup4 %>% 
@@ -2217,6 +2202,6 @@ openxlsx::read.xlsx(file.path(basepath,'results/manuscript_files/Supplementary_T
 rm(basepath)
 save.image(file.path(.basepath, 'tmp/multiomics.RData'))
 
-rm(list = ls())
+# rm(list = ls())
 sessionInfo()
 ```
