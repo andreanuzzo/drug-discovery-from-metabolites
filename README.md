@@ -1,3 +1,5 @@
+[![DOI](https://zenodo.org/badge/269442521.svg)](https://zenodo.org/badge/latestdoi/269442521)
+
 # Expanding the drug discovery space
 This is the code repository for the paper `Expanding the drug discovery space with predicted metabolite-target interactions` by Nuzzo, A. et al. 
 
